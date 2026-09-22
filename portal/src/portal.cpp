@@ -26,6 +26,51 @@ static const char* PORTAL_INTERFACE = "org.freedesktop.impl.portal.RemoteDesktop
 static const char* PORTAL_PATH = "/org/freedesktop/portal/desktop";
 static const char* PORTAL_NAME = "org.freedesktop.impl.portal.desktop.hypr-remote";
 
+static MonitorInfo get_primary_monitor() {
+    MonitorInfo m;
+    FILE* fp = popen("hyprctl monitors -j", "r");
+    if (!fp) return m;
+    
+    std::string out;
+    char buf[512];
+    while (fgets(buf, sizeof(buf), fp)) {
+        out += buf;
+    }
+    pclose(fp);
+
+    auto extract_str = [&](const std::string& key) -> std::string {
+        size_t p = out.find("\"" + key + "\":");
+        if (p == std::string::npos) return "";
+        size_t start = out.find("\"", p + key.length() + 3);
+        if (start == std::string::npos) return "";
+        size_t end = out.find("\"", start + 1);
+        if (end == std::string::npos) return "";
+        return out.substr(start + 1, end - start - 1);
+    };
+
+    auto extract_num = [&](const std::string& key, double def_val) -> double {
+        size_t p = out.find("\"" + key + "\":");
+        if (p == std::string::npos) return def_val;
+        size_t val_start = out.find_first_of("0123456789-", p + key.length() + 2);
+        if (val_start == std::string::npos) return def_val;
+        size_t val_end = out.find_first_not_of("0123456789.-", val_start);
+        try {
+            return std::stod(out.substr(val_start, val_end - val_start));
+        } catch (...) {
+            return def_val;
+        }
+    };
+
+    std::string name = extract_str("name");
+    if (!name.empty()) m.name = name;
+    m.width = static_cast<uint32_t>(extract_num("width", 2560));
+    m.height = static_cast<uint32_t>(extract_num("height", 1600));
+    m.scale = extract_num("scale", 2.0);
+    m.x = static_cast<uint32_t>(extract_num("x", 0));
+    m.y = static_cast<uint32_t>(extract_num("y", 0));
+    return m;
+}
+
 Portal::Portal() : libei_handler(nullptr), running(false) {
 }
 
@@ -35,6 +80,11 @@ Portal::~Portal() {
 
 bool Portal::init(LibEIHandler* handler) {
     libei_handler = handler;
+    current_monitor = get_primary_monitor();
+    std::cout << "[portal] Detected monitor: " << current_monitor.name << " ("
+              << current_monitor.width << "x" << current_monitor.height 
+              << ", scale=" << current_monitor.scale << ") at ("
+              << current_monitor.x << "," << current_monitor.y << ")" << std::endl;
     
     try {
         connection = sdbus::createSessionBusConnection();
@@ -374,9 +424,20 @@ void Portal::handle_eis_event(struct eis_event* event) {
             eis_device_configure_capability(pointer, EIS_DEVICE_CAP_BUTTON);
             eis_device_configure_capability(pointer, EIS_DEVICE_CAP_SCROLL);
             
+            // Primary region mapped to monitor name (e.g. eDP-1) for Google CRD matching
             struct eis_region* region = eis_device_new_region(pointer);
-            eis_region_set_size(region, 3840, 2560);
+            eis_region_set_offset(region, current_monitor.x, current_monitor.y);
+            eis_region_set_size(region, current_monitor.width, current_monitor.height);
+            eis_region_set_physical_scale(region, current_monitor.scale);
+            eis_region_set_mapping_id(region, current_monitor.name.c_str());
             eis_region_add(region);
+
+            // Fallback unmapped region
+            struct eis_region* fallback_region = eis_device_new_region(pointer);
+            eis_region_set_offset(fallback_region, 0, 0);
+            eis_region_set_size(fallback_region, current_monitor.width, current_monitor.height);
+            eis_region_set_physical_scale(fallback_region, 1.0);
+            eis_region_add(fallback_region);
             
             eis_device_add(pointer);
             eis_device_resume(pointer);
@@ -437,7 +498,8 @@ void Portal::handle_eis_event(struct eis_event* event) {
                 uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now().time_since_epoch()).count());
                 libei_handler->pointer->send_motion_absolute(time, 
-                    static_cast<uint32_t>(x), static_cast<uint32_t>(y), 3840, 2560);
+                    static_cast<uint32_t>(x), static_cast<uint32_t>(y), 
+                    current_monitor.width, current_monitor.height);
                 libei_handler->pointer->send_frame();
             }
             break;

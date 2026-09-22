@@ -87,7 +87,7 @@ class HyprCRDDaemon:
             for line in self.portal_proc.stdout:
                 line = line.strip()
                 if line:
-                    logging.debug(f"[portal] {line}")
+                    logging.info(f"[portal] {line}")
 
         t = threading.Thread(target=log_portal, daemon=True)
         t.start()

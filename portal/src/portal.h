@@ -12,6 +12,15 @@ extern "C" {
 
 class LibEIHandler;
 
+struct MonitorInfo {
+    std::string name = "eDP-1";
+    uint32_t width = 2560;
+    uint32_t height = 1600;
+    double scale = 2.0;
+    uint32_t x = 0;
+    uint32_t y = 0;
+};
+
 class Portal {
 public:
     Portal();
@@ -28,6 +37,7 @@ private:
     std::map<std::string, std::unique_ptr<sdbus::IObject>> session_objects;
     LibEIHandler* libei_handler;
     bool running;
+    MonitorInfo current_monitor;
     
     uint32_t modifier_state_depressed = 0;
     uint32_t modifier_state_latched = 0;

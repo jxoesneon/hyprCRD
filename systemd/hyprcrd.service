@@ -1,0 +1,17 @@
+[Unit]
+Description=hyprCRD - Native Chrome Remote Desktop for Hyprland
+After=graphical-session.target
+Wants=xdg-desktop-portal.service
+Documentation=file:///home/eduardo/hyprCRD/README.md
+
+[Service]
+Type=simple
+ExecStart=/home/eduardo/hyprCRD/bin/hyprcrd start -f
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=WAYLAND_DISPLAY=wayland-1
+Environment=XDG_CURRENT_DESKTOP=Hyprland
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# hyprcrd-picker: Smart screen-sharing picker for Hyprland
+# When Chrome Remote Desktop is active, automatically selects the primary monitor for unattended access.
+# Otherwise falls back to official hyprland-share-picker for other apps.
+
+MONITOR=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name // empty' 2>/dev/null || echo "eDP-1")
+[ -z "$MONITOR" ] && MONITOR="eDP-1"
+
+# If CRD is requesting screen capture or running, auto-select the primary display
+if pgrep -f "chrome-remote-desktop-host" >/dev/null 2>&1 || [ -f "/tmp/hyprcrd.pid" ]; then
+    echo "[SELECTION]/screen:${MONITOR}"
+    exit 0
+fi
+
+# Otherwise delegate to standard picker
+if [ -x "/usr/bin/hyprland-share-picker" ]; then
+    exec /usr/bin/hyprland-share-picker "$@"
+else
+    echo "[SELECTION]/screen:${MONITOR}"
+    exit 0
+fi

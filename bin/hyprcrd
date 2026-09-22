@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""
+hyprcrd - Unified Native CLI for Chrome Remote Desktop on Hyprland
+Provides 1:1 parity with Google's official CRD service, native Wayland
+streaming via PipeWire, and emulated input via libei and virtual devices.
+"""
+
+import os
+import sys
+import time
+import signal
+import psutil
+import argparse
+import subprocess
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+BIN_DIR = BASE_DIR / "bin"
+CORE_DIR = BASE_DIR / "core"
+TEST_DIR = BASE_DIR / "test"
+CONFIG_DIR = Path.home() / ".config" / "chrome-remote-desktop"
+PID_FILE = Path("/tmp/hyprcrd.pid")
+
+# Terminal colors
+CYAN = "\033[0;36m"
+GREEN = "\033[0;32m"
+YELLOW = "\033[1;33m"
+RED = "\033[0;31m"
+BOLD = "\033[1m"
+NC = "\033[0m"
+
+def print_banner():
+    print(f"{CYAN}{BOLD}")
+    print(r"""  _                              ____ ____  ____  
+ | |__  _   _ _ __  _ __        / ___|  _ \|  _ \ 
+ | '_ \| | | | '_ \| '__|______| |   | |_) | | | |
+ | | | | |_| | |_) | | |_______| |___|  _ <| |_| |
+ |_| |_|\__, | .__/|_|          \____|_| \_\____/ 
+        |___/|_|                                  """)
+    print(f" Native Chrome Remote Desktop for Hyprland (1:1 Parity){NC}\n")
+
+def cmd_doctor(args):
+    print(f"{BOLD}[hyprCRD Doctor] System Verification:{NC}")
+    
+    checks = [
+        ("Base directory", BASE_DIR.exists(), str(BASE_DIR)),
+        ("Host binary (from .deb)", (BIN_DIR / "chrome-remote-desktop-host").exists(), str(BIN_DIR / "chrome-remote-desktop-host")),
+        ("libremoting_core.so", (BIN_DIR / "libremoting_core.so").exists(), str(BIN_DIR / "libremoting_core.so")),
+        ("hyprcrd-portal binary", (BIN_DIR / "hyprcrd-portal").exists(), str(BIN_DIR / "hyprcrd-portal")),
+        ("PAM authorization shim", (BIN_DIR / "pam_shim.so").exists(), str(BIN_DIR / "pam_shim.so")),
+        ("Host credentials file", bool(list(CONFIG_DIR.glob("host#*.json"))), f"Found in {CONFIG_DIR}"),
+    ]
+    
+    # Check Wayland display
+    active_display = os.environ.get("WAYLAND_DISPLAY")
+    checks.append(("Active WAYLAND_DISPLAY", bool(active_display), active_display or "None detected"))
+    
+    # Check PipeWire
+    pw_check = subprocess.run(["pgrep", "-a", "pipewire"], stdout=subprocess.PIPE, text=True)
+    checks.append(("PipeWire server", pw_check.returncode == 0, pw_check.stdout.strip().split("\n")[0] if pw_check.returncode == 0 else "Not running"))
+
+    # Check xdg-desktop-portal-hyprland
+    xdph_check = subprocess.run(["pgrep", "-f", "xdg-desktop-portal-hyprland"], stdout=subprocess.PIPE, text=True)
+    checks.append(("Hyprland Portal backend", xdph_check.returncode == 0, "Active" if xdph_check.returncode == 0 else "Not running"))
+
+    all_passed = True
+    for name, status, detail in checks:
+        if status:
+            print(f"  {GREEN}✓{NC} {BOLD}{name:<28}{NC}: {detail}")
+        else:
+            print(f"  {RED}✗{NC} {BOLD}{name:<28}{NC}: {detail}")
+            all_passed = False
+
+    print()
+    if all_passed:
+        print(f"{GREEN}All diagnostic checks PASSED. System is ready for native hyprCRD.{NC}")
+    else:
+        print(f"{YELLOW}Some components require attention.{NC}")
+
+def cmd_test(args):
+    test_script = TEST_DIR / "run_isolated_test.sh"
+    if not test_script.exists():
+        print(f"{RED}Error: Test script {test_script} not found.{NC}")
+        sys.exit(1)
+    
+    os.system(str(test_script))
+
+def cmd_start(args):
+    if PID_FILE.exists():
+        try:
+            pid = int(PID_FILE.read_text().strip())
+            if psutil.pid_exists(pid):
+                print(f"{YELLOW}hyprCRD is already running (PID: {pid}).{NC}")
+                return
+        except Exception:
+            pass
+
+    display = args.display or os.environ.get("WAYLAND_DISPLAY", "wayland-1")
+    daemon_py = CORE_DIR / "daemon.py"
+
+    cmd = [sys.executable, "-u", str(daemon_py), f"--display={display}"]
+    if args.config:
+        cmd.append(f"--config={args.config}")
+
+    if args.foreground:
+        print(f"{GREEN}Starting hyprCRD in foreground on {display}...{NC}")
+        subprocess.run(cmd)
+    else:
+        print(f"{GREEN}Starting hyprCRD daemon on {display}...{NC}")
+        log_file = open("/tmp/hyprcrd.log", "a", buffering=1)
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        proc = subprocess.Popen(cmd, env=env, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True)
+        PID_FILE.write_text(str(proc.pid))
+        print(f"hyprCRD started (PID: {proc.pid}). Logs at /tmp/hyprcrd.log")
+
+def cmd_stop(args):
+    stopped = False
+    if PID_FILE.exists():
+        try:
+            pid = int(PID_FILE.read_text().strip())
+            if psutil.pid_exists(pid):
+                print(f"Stopping hyprCRD daemon (PID: {pid})...")
+                os.kill(pid, signal.SIGTERM)
+                time.sleep(1)
+                if psutil.pid_exists(pid):
+                    os.kill(pid, signal.SIGKILL)
+                stopped = True
+        except Exception as e:
+            print(f"{YELLOW}Error reading PID file: {e}{NC}")
+        try:
+            PID_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    # Stop portal if lingering
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            cmdline = " ".join(proc.info["cmdline"] or [])
+            if "hyprcrd-portal" in cmdline or "chrome-remote-desktop-host" in cmdline and str(BASE_DIR) in cmdline:
+                proc.terminate()
+                stopped = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    if stopped:
+        print(f"{GREEN}hyprCRD stopped successfully.{NC}")
+    else:
+        print(f"{YELLOW}hyprCRD was not running.{NC}")
+
+def cmd_status(args):
+    is_running = False
+    daemon_pid = None
+    if PID_FILE.exists():
+        try:
+            pid = int(PID_FILE.read_text().strip())
+            if psutil.pid_exists(pid):
+                is_running = True
+                daemon_pid = pid
+        except Exception:
+            pass
+
+    print(f"{BOLD}[hyprCRD Status]{NC}")
+    if is_running:
+        print(f"  Daemon:         {GREEN}ACTIVE{NC} (PID: {daemon_pid})")
+    else:
+        print(f"  Daemon:         {RED}INACTIVE{NC}")
+
+    # Portal status
+    portal_active = False
+    for proc in psutil.process_iter(["pid", "name"]):
+        if proc.info["name"] == "hyprcrd-portal":
+            print(f"  Portal Bridge:  {GREEN}ONLINE{NC} (PID: {proc.info['pid']})")
+            portal_active = True
+            break
+    if not portal_active:
+        print(f"  Portal Bridge:  {YELLOW}STANDBY{NC}")
+
+    # Registered host configs
+    configs = list(CONFIG_DIR.glob("host#*.json"))
+    if configs:
+        import json
+        for cfg in configs:
+            try:
+                with open(cfg) as f:
+                    d = json.load(f)
+                    print(f"  Enrolled Host:  {GREEN}{d.get('host_name')}{NC} (ID: {d.get('host_id')})")
+            except Exception:
+                pass
+    else:
+        print(f"  Enrolled Host:  {YELLOW}None{NC} (Run 'hyprcrd register' to enroll)")
+
+def main():
+    print_banner()
+    parser = argparse.ArgumentParser(description="hyprCRD CLI")
+    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+
+    # start
+    p_start = subparsers.add_parser("start", help="Start the hyprCRD native host daemon")
+    p_start.add_argument("--display", help="Target Wayland display (default: $WAYLAND_DISPLAY or wayland-1)")
+    p_start.add_argument("--config", help="Custom host config JSON path")
+    p_start.add_argument("-f", "--foreground", action="store_true", help="Run in foreground instead of background")
+    p_start.set_defaults(func=cmd_start)
+
+    # stop
+    p_stop = subparsers.add_parser("stop", help="Stop the running hyprCRD host")
+    p_stop.set_defaults(func=cmd_stop)
+
+    # restart
+    p_restart = subparsers.add_parser("restart", help="Restart hyprCRD")
+    p_restart.add_argument("--display", help="Target Wayland display")
+    p_restart.add_argument("--config", help="Custom host config JSON path")
+    p_restart.add_argument("-f", "--foreground", action="store_true", help="Run in foreground")
+    p_restart.set_defaults(func=lambda args: (cmd_stop(args), time.sleep(1), cmd_start(args)))
+
+    # status
+    p_status = subparsers.add_parser("status", help="Show hyprCRD status")
+    p_status.set_defaults(func=cmd_status)
+
+    # doctor
+    p_doc = subparsers.add_parser("doctor", help="Run system and component diagnostics")
+    p_doc.set_defaults(func=cmd_doctor)
+
+    # test
+    p_test = subparsers.add_parser("test", help="Run automated isolated test suite without affecting active session")
+    p_test.set_defaults(func=cmd_test)
+
+    args = parser.parse_args()
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
+
+    args.func(args)
+
+if __name__ == "__main__":
+    main()

@@ -16,7 +16,7 @@ portal:
 shim:
 	@mkdir -p bin
 	$(CC) -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so \
-		$$(pkg-config --cflags --libs gio-2.0 libpipewire-0.3 pam) -ldl
+		$$(pkg-config --cflags --libs gio-2.0 libpipewire-0.3) -ldl
 
 test:
 	@./test/run_all_tests.sh

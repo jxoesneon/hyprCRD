@@ -47,7 +47,6 @@ modules:
     config-opts:
       - -Dliboeffis=disabled
       - -Dtests=disabled
-      - -Ddocumentation=disabled
     sources:
       - type: git
         url: https://gitlab.freedesktop.org/libinput/libei.git
@@ -57,7 +56,7 @@ modules:
     buildsystem: simple
     build-commands:
       # Unpack official Chrome Remote Desktop debian package
-      - bsdtar -xf chrome-remote-desktop_current_amd64.deb data.tar.xz
+      - ar -x chrome-remote-desktop_current_amd64.deb data.tar.xz || bsdtar -xf chrome-remote-desktop_current_amd64.deb data.tar.xz
       - mkdir -p crd-deb-data && bsdtar -xf data.tar.xz -C crd-deb-data
 
       # Build portal
@@ -65,7 +64,7 @@ modules:
       - cmake --build portal/build
 
       # Build PAM shim
-      - gcc -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3 pam) -ldl
+      - gcc -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3) -ldl
 
       # Install files
       - install -dm755 /app/bin /app/lib/hyprcrd /app/share/applications /app/share/icons/hicolor/scalable/apps

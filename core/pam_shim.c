@@ -3,7 +3,13 @@
 #include <errno.h>
 #include <gio/gio.h>
 #include <pipewire/pipewire.h>
+#if __has_include(<security/pam_appl.h>)
 #include <security/pam_appl.h>
+#else
+typedef struct pam_handle pam_handle_t;
+struct pam_conv;
+#define PAM_SUCCESS 0
+#endif
 #include <stdio.h>
 #include <string.h>
 

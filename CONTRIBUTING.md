@@ -33,7 +33,7 @@ sudo pacman -S --needed \
 ### Building
 
 ```bash
-git clone https://github.com/hyprcrd/hyprCRD.git
+git clone https://github.com/jxoesneon/hyprCRD.git
 cd hyprCRD
 
 # Build portal and PAM shim

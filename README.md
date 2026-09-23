@@ -2,8 +2,8 @@
 
 Native Wayland and PipeWire host for Google Chrome Remote Desktop on Hyprland.
 
-[![CI Pipeline](https://github.com/hyprcrd/hyprCRD/actions/workflows/ci.yml/badge.svg)](https://github.com/hyprcrd/hyprCRD/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-95%25-green.svg)](https://github.com/hyprcrd/hyprCRD)
+[![CI Pipeline](https://github.com/jxoesneon/hyprCRD/actions/workflows/ci.yml/badge.svg)](https://github.com/jxoesneon/hyprCRD/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-95%25-green.svg)](https://github.com/jxoesneon/hyprCRD)
 [![AUR version](https://img.shields.io/aur/version/hyprcrd-git.svg)](https://aur.archlinux.org/packages/hyprcrd-git)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Hyprland Compatibility](https://img.shields.io/badge/Hyprland-v0.40+-blue.svg)](https://hyprland.org)
@@ -92,7 +92,7 @@ flatpak install flathub org.hyprland.hyprcrd
 
 ```bash
 # Clone repository
-git clone https://github.com/hyprcrd/hyprCRD.git
+git clone https://github.com/jxoesneon/hyprCRD.git
 cd hyprCRD
 
 # Install build dependencies (Arch Linux)

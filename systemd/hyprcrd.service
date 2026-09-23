@@ -6,6 +6,7 @@ Documentation=file:///home/eduardo/hyprCRD/README.md
 
 [Service]
 Type=simple
+ExecStartPre=/bin/sh -c 'dbus-update-activation-environment --systemd XDG_CURRENT_DESKTOP WAYLAND_DISPLAY; busctl --user introspect org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop 2>/dev/null | grep -q "portal.RemoteDesktop" || systemctl --user restart xdg-desktop-portal.service; sleep 1'
 ExecStart=/home/eduardo/hyprCRD/bin/hyprcrd start -f
 Restart=on-failure
 RestartSec=5

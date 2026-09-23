@@ -78,7 +78,7 @@ add_library(wayland_protocols STATIC
 )
 
 # Ensure protocol headers are generated before compilation
-add_custom_target(generate_protocols DEPENDS 
+add_custom_target(generate_protocols DEPENDS
     ${VIRTUAL_KEYBOARD_HEADER}
     ${VIRTUAL_KEYBOARD_SOURCE}
     ${VIRTUAL_POINTER_HEADER}
@@ -143,7 +143,7 @@ target_link_libraries(xdg-desktop-portal-hypr-remote
     ${XKBCOMMON_LIBRARIES}
 )
 
-set_target_properties(xdg-desktop-portal-hypr-remote PROPERTIES 
+set_target_properties(xdg-desktop-portal-hypr-remote PROPERTIES
     OUTPUT_NAME hyprcrd-portal
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../bin"
 )
@@ -168,4 +168,4 @@ target_include_directories(test-virtual-input PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
     ${WAYLAND_CLIENT_INCLUDE_DIRS}
     ${GENERATED_DIR}
-) 
+)

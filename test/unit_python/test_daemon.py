@@ -32,7 +32,7 @@ class TestHyprCRDDaemon(unittest.TestCase):
             "host_id": "test-host-id-1234",
             "host_name": "TestHyprHost",
             "host_secret_hash": "sha256:abc12345",
-            "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----",
+            "private_key": "MOCK_DEVELOPMENT_KEY_PLACEHOLDER",
         }
         with open(self.sample_config_path, "w", encoding="utf-8") as f:
             json.dump(self.sample_config, f)

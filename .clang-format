@@ -22,7 +22,6 @@ BreakBeforeBinaryOperators: None
 BreakBeforeBraces: Attach
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializers: BeforeColon
-Cpp11BridgedWay: true
 IncludeBlocks: Regroup
 SortIncludes: CaseSensitive
 SpaceAfterCStyleCast: false

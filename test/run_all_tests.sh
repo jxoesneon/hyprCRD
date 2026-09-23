@@ -10,10 +10,8 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-CYAN='\033[0;36m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
 RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m'
@@ -39,10 +37,12 @@ run_suite() {
 
 # Pre-build C/C++ unit test harnesses
 echo -e "\n${BLUE}▶ Compiling C/C++ unit test harnesses...${NC}"
+# shellcheck disable=SC2046
 gcc -DTESTING_COVERAGE -fprofile-arcs -ftest-coverage -o "$BASE_DIR/test/unit/run_test_pam_shim" \
     "$BASE_DIR/test/unit/test_pam_shim.c" "$BASE_DIR/core/pam_shim.c" \
     $(pkg-config --cflags --libs libpipewire-0.3 gio-2.0 pam) -ldl
 
+# shellcheck disable=SC2046
 g++ -std=c++20 -o "$BASE_DIR/test/unit/run_test_portal_logic" \
     "$BASE_DIR/test/unit/test_portal_logic.cpp" \
     "$BASE_DIR/portal/src/wayland_virtual_pointer.cpp" \

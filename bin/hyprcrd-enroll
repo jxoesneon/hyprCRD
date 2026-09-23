@@ -44,13 +44,13 @@ BEFORE_CONFIGS=$(ls -1 "$CONFIG_DIR"/host#*.json 2>/dev/null || true)
     --disable-crash-reporting 2>&1 | tee /tmp/crd-enroll.log
 
 # Detect new config file
-AFTER_CONFIGS=$(ls -1 "$CONFIG_DIR"/host#*.json 2>/dev/null || true)
+AFTER_CONFIGS=$(find "$CONFIG_DIR" -name "host#*.json" 2>/dev/null | sort || true)
 NEW_CONFIG=$(comm -13 <(echo "$BEFORE_CONFIGS" | sort) <(echo "$AFTER_CONFIGS" | sort) | head -1)
 
 if [ -z "$NEW_CONFIG" ]; then
     # In case it updated in-place or created latest
-    NEW_CONFIG=$(ls -t "$CONFIG_DIR"/host#*.json | head -1)
+    NEW_CONFIG=$(find "$CONFIG_DIR" -name "host#*.json" -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)
 fi
 
-echo "✓ Enrollment completed. Host config: $NEW_CONFIG"
-echo "Host '$HOST_NAME' is registered with Google Remote Desktop!"
+echo "Enrollment completed. Host config: $NEW_CONFIG"
+echo "Host '$HOST_NAME' registered with Google Remote Desktop."

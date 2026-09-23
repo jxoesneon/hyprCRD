@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   code-quality:
-    name: Code Quality & Linting
+    name: Code Quality & Static Analysis
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
@@ -23,17 +23,65 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Linting Tools
+      - name: Install Python Quality Tools
         run: |
-          pip install black flake8
+          pip install black flake8 mypy bandit
 
-      - name: Run Python Format Check
+      - name: Python Format Check (black)
         run: |
-          black --check bin/hyprcrd core/daemon.py test/unit_python/
+          black --check bin/hyprcrd core/daemon.py test/unit_python/ scripts/
 
-      - name: Run Python Lint
+      - name: Python Lint Check (flake8)
         run: |
-          flake8 bin/hyprcrd core/daemon.py test/unit_python/ --count --max-line-length=140 --statistics
+          flake8 bin/hyprcrd core/daemon.py test/unit_python/ scripts/ --count --max-line-length=140 --statistics
+
+      - name: Python Type Check (mypy)
+        run: |
+          mypy bin/hyprcrd core/daemon.py scripts/check_hygiene.py --ignore-missing-imports
+
+      - name: C/C++ Format Check (clang-format)
+        run: |
+          clang-format --dry-run --Werror \
+            core/pam_shim.c \
+            portal/src/*.cpp \
+            portal/src/*.h \
+            portal/test_virtual_input.cpp
+
+      - name: Shell Script Lint (shellcheck)
+        run: |
+          shellcheck \
+            scripts/*.sh \
+            test/*.sh \
+            bin/hyprcrd-enroll
+
+  security-and-hygiene:
+    name: Security & Repository Hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Repository Hygiene Gate (Tracked Binaries & Secrets)
+        run: |
+          python3 scripts/check_hygiene.py
+
+      - name: Python AST Security Audit (bandit)
+        run: |
+          pip install bandit
+          bandit -r bin/hyprcrd core/daemon.py -s B108,B110,B404,B603,B607
+
+      - name: Secret Leak Detection (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
 
   build-and-test:
     name: Arch Linux Build & 100% Test Suite
@@ -65,7 +113,7 @@ jobs:
 
       - name: Pre-build Portal & PAM Shim
         run: |
-          # 1. Build C++20 Portal
+          # 1. Build C++20 Portal with compiler warnings treated as errors
           cmake -B portal/build -S portal -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build portal/build
 
@@ -75,15 +123,11 @@ jobs:
 
       - name: Run Master Test Suite & Coverage Verification
         run: |
-          # Make test runners executable
           chmod +x test/run_all_tests.sh test/run_isolated_test.sh
-          
-          # Execute master test runner
           ./test/run_all_tests.sh
 
       - name: Enforce Coverage Thresholds
         run: |
-          # Python coverage threshold check
           uv tool run --with psutil coverage report --fail-under=95
 
   aur-package-lint:

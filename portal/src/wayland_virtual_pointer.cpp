@@ -1,6 +1,7 @@
 #include "wayland_virtual_pointer.h"
-#include <iostream>
+
 #include <cstring>
+#include <iostream>
 
 static const struct wl_registry_listener registry_listener = {
     .global = WaylandVirtualPointer::registry_global,
@@ -8,9 +9,11 @@ static const struct wl_registry_listener registry_listener = {
 };
 
 WaylandVirtualPointer::WaylandVirtualPointer()
-    : display(nullptr), registry(nullptr), seat(nullptr), 
-      pointer_manager(nullptr), virtual_pointer(nullptr) {
-}
+    : display(nullptr),
+      registry(nullptr),
+      seat(nullptr),
+      pointer_manager(nullptr),
+      virtual_pointer(nullptr) {}
 
 WaylandVirtualPointer::~WaylandVirtualPointer() {
     cleanup();
@@ -75,34 +78,34 @@ void WaylandVirtualPointer::cleanup() {
     }
 }
 
-void WaylandVirtualPointer::registry_global(void* data, struct wl_registry* registry,
-                                           uint32_t name, const char* interface, uint32_t version) {
+void WaylandVirtualPointer::registry_global(void* data, struct wl_registry* registry, uint32_t name,
+                                            const char* interface, uint32_t version) {
     WaylandVirtualPointer* self = static_cast<WaylandVirtualPointer*>(data);
-    
+
     if (strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name) == 0) {
-        self->pointer_manager = static_cast<struct zwlr_virtual_pointer_manager_v1*>(
-            wl_registry_bind(registry, name, &zwlr_virtual_pointer_manager_v1_interface, 
-                           std::min(version, 2u)));
+        self->pointer_manager =
+            static_cast<struct zwlr_virtual_pointer_manager_v1*>(wl_registry_bind(
+                registry, name, &zwlr_virtual_pointer_manager_v1_interface, std::min(version, 2u)));
     } else if (strcmp(interface, wl_seat_interface.name) == 0) {
-        self->seat = static_cast<struct wl_seat*>(
-            wl_registry_bind(registry, name, &wl_seat_interface, 1));
+        self->seat =
+            static_cast<struct wl_seat*>(wl_registry_bind(registry, name, &wl_seat_interface, 1));
     }
 }
 
-void WaylandVirtualPointer::registry_global_remove(void* data, struct wl_registry* registry, uint32_t name) {
+void WaylandVirtualPointer::registry_global_remove(void* data, struct wl_registry* registry,
+                                                   uint32_t name) {
     // Handle global removal if needed
 }
 
 void WaylandVirtualPointer::send_motion(uint32_t time, double dx, double dy) {
     if (virtual_pointer) {
-        zwlr_virtual_pointer_v1_motion(virtual_pointer, time, 
-                                     wl_fixed_from_double(dx), 
-                                     wl_fixed_from_double(dy));
+        zwlr_virtual_pointer_v1_motion(virtual_pointer, time, wl_fixed_from_double(dx),
+                                       wl_fixed_from_double(dy));
     }
 }
 
-void WaylandVirtualPointer::send_motion_absolute(uint32_t time, uint32_t x, uint32_t y, 
-                                               uint32_t x_extent, uint32_t y_extent) {
+void WaylandVirtualPointer::send_motion_absolute(uint32_t time, uint32_t x, uint32_t y,
+                                                 uint32_t x_extent, uint32_t y_extent) {
     if (virtual_pointer) {
         zwlr_virtual_pointer_v1_motion_absolute(virtual_pointer, time, x, y, x_extent, y_extent);
     }
@@ -130,11 +133,13 @@ void WaylandVirtualPointer::send_axis_discrete(uint32_t time, int32_t dx, int32_
     if (virtual_pointer) {
         if (dy != 0) {
             zwlr_virtual_pointer_v1_axis_discrete(virtual_pointer, time,
-                WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_int(dy * 15), dy);
+                                                  WL_POINTER_AXIS_VERTICAL_SCROLL,
+                                                  wl_fixed_from_int(dy * 15), dy);
         }
         if (dx != 0) {
             zwlr_virtual_pointer_v1_axis_discrete(virtual_pointer, time,
-                WL_POINTER_AXIS_HORIZONTAL_SCROLL, wl_fixed_from_int(dx * 15), dx);
+                                                  WL_POINTER_AXIS_HORIZONTAL_SCROLL,
+                                                  wl_fixed_from_int(dx * 15), dx);
         }
     }
 }
@@ -150,4 +155,4 @@ void WaylandVirtualPointer::send_frame() {
         zwlr_virtual_pointer_v1_frame(virtual_pointer);
         wl_display_flush(display);
     }
-} 
+}

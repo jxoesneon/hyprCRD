@@ -123,7 +123,7 @@ static void test_pipewire_protection() {
 
 static void test_screencast_cursor_patch() {
     printf("[TEST] Testing GVariant cursor_mode rewriting (4 -> 2)...\n");
-    
+
     /* 1. NULL parameter check */
     assert(patch_screencast_select_sources(NULL) == NULL);
 

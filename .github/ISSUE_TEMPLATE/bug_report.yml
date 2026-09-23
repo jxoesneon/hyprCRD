@@ -1,0 +1,47 @@
+name: Bug Report
+description: File a reproducible bug or unexpected behavior report
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue with hyprCRD. Please ensure you are running supported software versions and have run `hyprcrd doctor` first.
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the problem is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the issue.
+      placeholder: |
+        1. Start daemon with `hyprcrd start -f`
+        2. Connect via Android client
+        3. Observe crash or error log
+    validations:
+      required: true
+  - type: textarea
+    id: doctor_output
+    attributes:
+      label: Diagnostics Output
+      description: Paste the output of `hyprcrd doctor`.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Information
+      description: Compositor version, Linux distribution, and hardware details.
+      placeholder: |
+        - Linux Distribution: Arch Linux
+        - Hyprland Version: 0.44.0
+        - PipeWire Version: 1.2.0
+        - GPU / Driver: AMD Radeon RX 7900 XTX (amdgpu / Mesa)
+    validations:
+      required: true

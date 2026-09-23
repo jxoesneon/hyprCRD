@@ -23,5 +23,5 @@ SOFTWARE.
 ---
 
 ### Third-Party Notice & Proprietary Components
-`hyprCRD` provides an open-source Wayland portal bridge, PAM interceptor, and supervision daemon under the MIT license. 
+`hyprCRD` provides an open-source Wayland portal bridge, PAM interceptor, and supervision daemon under the MIT license.
 The official Google Chrome Remote Desktop binaries (`chrome-remote-desktop-host`, `libremoting_core.so`, `icudtl.dat`, and related localization files) are proprietary software owned by Google LLC and are subject to the Google Chrome / Chrome Remote Desktop Terms of Service. In packaged distributions (such as AUR or Flatpak), these binaries are fetched directly from Google's official debian repository mirrors and unpacked dynamically during installation.

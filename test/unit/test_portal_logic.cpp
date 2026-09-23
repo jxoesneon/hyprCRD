@@ -174,7 +174,7 @@ static void test_modifier_state_tracker() {
 static void test_wayland_virtual_pointer_methods() {
     std::cout << "[TEST] Testing WaylandVirtualPointer lifecycle & methods..." << std::endl;
     WaylandVirtualPointer pointer;
-    
+
     // Testing uninitialized calls (must safely no-op without crashing)
     pointer.send_motion(100, 1.0, -1.0);
     pointer.send_motion_absolute(101, 100, 200, 1920, 1080);

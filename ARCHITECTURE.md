@@ -105,13 +105,13 @@ The compiled keymap string is uploaded to compositor shared memory (`memfd_creat
 ```mermaid
 stateDiagram-v2
     [*] --> Inactive
-    
+
     Inactive --> Initializing : hyprcrd start / systemd
     Initializing --> PortalReady : hyprcrd-portal starts & claims D-Bus
     PortalReady --> HostSpawned : Launch chrome-remote-desktop-host with pam_shim.so
     HostSpawned --> Negotiating : ConnectToEIS & ScreenCast.Start
     Negotiating --> Streaming : WebRTC signaling connected & SIGUSR1 received
-    
+
     Streaming --> Streaming : Active session & WebRTC encoding
     Streaming --> Teardown : SIGTERM / hyprcrd stop
     Teardown --> Inactive : Clean IPC shutdown

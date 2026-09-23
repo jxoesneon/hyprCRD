@@ -69,13 +69,13 @@ class TestHyprCRDCLI(unittest.TestCase):
                 hyprcrd_cli.cmd_doctor(args)
                 mock_print.assert_called()
 
-    @patch("os.system")
-    def test_04_cmd_test(self, mock_system):
+    @patch("subprocess.run")
+    def test_04_cmd_test(self, mock_run):
         args = MagicMock()
         with patch("builtins.print"):
             with patch.object(Path, "exists", return_value=True):
                 hyprcrd_cli.cmd_test(args)
-                mock_system.assert_called_once()
+                mock_run.assert_called_once()
 
     @patch("psutil.pid_exists", return_value=True)
     def test_05_cmd_start_already_running(self, mock_pid_exists):

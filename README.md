@@ -32,17 +32,17 @@ The official Chrome Remote Desktop host for Linux historically depended on virtu
 ```mermaid
 flowchart TD
     Client["Client Device (Android / iOS / Web)"] <-->|"WebRTC / Google FTL Signaling"| CRDHost["Google Remoting Host (chrome-remote-desktop-host)"]
-    
+
     subgraph hyprCRD ["hyprCRD User Session"]
         CRDHost <-->|"D-Bus: org.freedesktop.impl.portal.RemoteDesktop"| Portal["hyprcrd-portal (C++20 Bridge)"]
         CRDHost -->|"Preload Interceptor"| Shim["pam_shim.so (C99 Hook)"]
-        
+
         Shim -->|"Resolves cursor_mode & stream renegotiations"| PipeWire["PipeWire Media Server"]
         Portal -->|"EIS Protocol (libei/libeis)"| InputServer["Virtual Input Controller"]
         InputServer -->|"zwlr_virtual_pointer_v1"| HyprlandPointer["Hyprland Virtual Pointer"]
         InputServer -->|"zwp_virtual_keyboard_v1 + XKB"| HyprlandKeyboard["Hyprland Virtual Keyboard"]
     end
-    
+
     PipeWire <-->|"DMA-BUF / SHM Capture"| XDPH["xdg-desktop-portal-hyprland"]
     XDPH <-->|"Wayland Screencopy"| HyprlandCompositor["Hyprland Compositor (Physical Output)"]
 ```

@@ -1,0 +1,39 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+        files: ^(bin/hyprcrd|core/|test/unit_python/|scripts/)
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        args: ['--max-line-length=140']
+        files: ^(bin/hyprcrd|core/|test/unit_python/|scripts/)
+
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: clang-format
+        entry: clang-format --dry-run --Werror
+        language: system
+        files: ^(core/pam_shim\.c|portal/src/.*\.(cpp|h)|portal/test_virtual_input\.cpp)$
+
+      - id: hygiene-check
+        name: repository hygiene (binaries and secrets)
+        entry: python3 scripts/check_hygiene.py
+        language: system
+        pass_filenames: false
+        always_run: true

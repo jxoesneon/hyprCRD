@@ -59,7 +59,7 @@ modules:
       # Unpack official Chrome Remote Desktop debian package
       - bsdtar -xf chrome-remote-desktop_current_amd64.deb data.tar.xz
       - mkdir -p crd-deb-data && bsdtar -xf data.tar.xz -C crd-deb-data
-      
+
       # Build portal
       - cmake -B portal/build -S portal -G Ninja -DCMAKE_BUILD_TYPE=Release
       - cmake --build portal/build

@@ -53,7 +53,7 @@ prepare() {
 
 build() {
     cd "${srcdir}/hyprCRD"
-    
+
     # 1. Build C++20 Portal Bridge
     cmake -B portal/build -S portal -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -87,7 +87,7 @@ package() {
     install -m755 "${DEB_ROOT}/chrome-remote-desktop-host" "${pkgdir}/usr/lib/hyprcrd/chrome-remote-desktop-host"
     install -m644 "${DEB_ROOT}/libremoting_core.so" "${pkgdir}/usr/lib/hyprcrd/libremoting_core.so"
     install -m644 "${DEB_ROOT}/icudtl.dat" "${pkgdir}/usr/lib/hyprcrd/icudtl.dat"
-    
+
     if [ -d "${DEB_ROOT}/remoting_locales" ]; then
         cp -r "${DEB_ROOT}/remoting_locales" "${pkgdir}/usr/lib/hyprcrd/"
     fi

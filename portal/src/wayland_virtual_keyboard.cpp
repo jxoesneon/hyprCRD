@@ -1,9 +1,11 @@
 #include "wayland_virtual_keyboard.h"
-#include <iostream>
-#include <cstring>
+
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <fcntl.h>
+
+#include <cstring>
+#include <iostream>
 
 static const struct wl_registry_listener registry_listener = {
     .global = WaylandVirtualKeyboard::registry_global,
@@ -21,9 +23,11 @@ static const char keymap_str[] =
     "};\n";
 
 WaylandVirtualKeyboard::WaylandVirtualKeyboard()
-    : display(nullptr), registry(nullptr), seat(nullptr), 
-      keyboard_manager(nullptr), virtual_keyboard(nullptr) {
-}
+    : display(nullptr),
+      registry(nullptr),
+      seat(nullptr),
+      keyboard_manager(nullptr),
+      virtual_keyboard(nullptr) {}
 
 WaylandVirtualKeyboard::~WaylandVirtualKeyboard() {
     cleanup();
@@ -53,7 +57,8 @@ bool WaylandVirtualKeyboard::init() {
     }
 
     // Create virtual keyboard
-    virtual_keyboard = zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(keyboard_manager, seat);
+    virtual_keyboard =
+        zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(keyboard_manager, seat);
     if (!virtual_keyboard) {
         std::cerr << "Failed to create virtual keyboard" << std::endl;
         cleanup();
@@ -97,7 +102,8 @@ void WaylandVirtualKeyboard::cleanup() {
 #include <xkbcommon/xkbcommon.h>
 
 bool WaylandVirtualKeyboard::setup_keymap() {
-    if (!virtual_keyboard) return false;
+    if (!virtual_keyboard)
+        return false;
 
     char* allocated_keymap = nullptr;
     size_t keymap_size = 0;
@@ -118,19 +124,21 @@ bool WaylandVirtualKeyboard::setup_keymap() {
     }
 
     keymap_size = strlen(target_keymap) + 1;
-    
+
     // Create shared memory file
     int fd = memfd_create("keymap", MFD_CLOEXEC);
     if (fd < 0) {
         std::cerr << "Failed to create memfd" << std::endl;
-        if (allocated_keymap) free(allocated_keymap);
+        if (allocated_keymap)
+            free(allocated_keymap);
         return false;
     }
 
     if (ftruncate(fd, keymap_size) < 0) {
         std::cerr << "Failed to resize memfd" << std::endl;
         close(fd);
-        if (allocated_keymap) free(allocated_keymap);
+        if (allocated_keymap)
+            free(allocated_keymap);
         return false;
     }
 
@@ -138,7 +146,8 @@ bool WaylandVirtualKeyboard::setup_keymap() {
     if (data == MAP_FAILED) {
         std::cerr << "Failed to mmap keymap" << std::endl;
         close(fd);
-        if (allocated_keymap) free(allocated_keymap);
+        if (allocated_keymap)
+            free(allocated_keymap);
         return false;
     }
 
@@ -150,26 +159,29 @@ bool WaylandVirtualKeyboard::setup_keymap() {
     }
 
     // Send keymap to compositor
-    zwp_virtual_keyboard_v1_keymap(virtual_keyboard, 1, fd, keymap_size); // XKB_KEYMAP_FORMAT_TEXT_V1 = 1
+    zwp_virtual_keyboard_v1_keymap(virtual_keyboard, 1, fd,
+                                   keymap_size);  // XKB_KEYMAP_FORMAT_TEXT_V1 = 1
     close(fd);
 
     return true;
 }
 
 void WaylandVirtualKeyboard::registry_global(void* data, struct wl_registry* registry,
-                                            uint32_t name, const char* interface, uint32_t version) {
+                                             uint32_t name, const char* interface,
+                                             uint32_t version) {
     WaylandVirtualKeyboard* self = static_cast<WaylandVirtualKeyboard*>(data);
-    
+
     if (strcmp(interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0) {
         self->keyboard_manager = static_cast<struct zwp_virtual_keyboard_manager_v1*>(
             wl_registry_bind(registry, name, &zwp_virtual_keyboard_manager_v1_interface, 1));
     } else if (strcmp(interface, wl_seat_interface.name) == 0) {
-        self->seat = static_cast<struct wl_seat*>(
-            wl_registry_bind(registry, name, &wl_seat_interface, 1));
+        self->seat =
+            static_cast<struct wl_seat*>(wl_registry_bind(registry, name, &wl_seat_interface, 1));
     }
 }
 
-void WaylandVirtualKeyboard::registry_global_remove(void* data, struct wl_registry* registry, uint32_t name) {
+void WaylandVirtualKeyboard::registry_global_remove(void* data, struct wl_registry* registry,
+                                                    uint32_t name) {
     // Handle global removal if needed
 }
 
@@ -180,11 +192,11 @@ void WaylandVirtualKeyboard::send_key(uint32_t time, uint32_t key, uint32_t stat
     }
 }
 
-void WaylandVirtualKeyboard::send_modifiers(uint32_t mods_depressed, uint32_t mods_latched, 
-                                          uint32_t mods_locked, uint32_t group) {
+void WaylandVirtualKeyboard::send_modifiers(uint32_t mods_depressed, uint32_t mods_latched,
+                                            uint32_t mods_locked, uint32_t group) {
     if (virtual_keyboard) {
-        zwp_virtual_keyboard_v1_modifiers(virtual_keyboard, mods_depressed, 
-                                        mods_latched, mods_locked, group);
+        zwp_virtual_keyboard_v1_modifiers(virtual_keyboard, mods_depressed, mods_latched,
+                                          mods_locked, group);
         wl_display_flush(display);
     }
-} 
+}

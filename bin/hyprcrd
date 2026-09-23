@@ -154,7 +154,7 @@ def cmd_test(args):
         print(f"{RED}Error: Test script {test_script} not found.{NC}")
         sys.exit(1)
 
-    os.system(str(test_script))
+    subprocess.run([str(test_script)], check=False)
 
 
 def cmd_start(args):

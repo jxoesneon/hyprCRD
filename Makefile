@@ -1,4 +1,4 @@
-.PHONY: all portal shim test lint format clean fetch-google-deps
+.PHONY: all portal shim test lint format check gate clean fetch-google-deps
 
 CC ?= gcc
 CXX ?= g++
@@ -22,14 +22,33 @@ test:
 	@./test/run_all_tests.sh
 
 lint:
-	@uv tool run black --check bin/hyprcrd core/daemon.py test/unit_python/
-	@uv tool run flake8 bin/hyprcrd core/daemon.py test/unit_python/ --count --max-line-length=140 --statistics
+	@echo "Checking Python formatting (black)..."
+	@uv tool run black --check bin/hyprcrd core/daemon.py test/unit_python/ scripts/
+	@echo "Checking Python style (flake8)..."
+	@uv tool run flake8 bin/hyprcrd core/daemon.py test/unit_python/ scripts/ --count --max-line-length=140 --statistics
+	@echo "Checking Python typing (mypy)..."
+	@uv tool run mypy bin/hyprcrd core/daemon.py scripts/check_hygiene.py --ignore-missing-imports
+	@echo "Checking C/C++ formatting (clang-format)..."
+	@clang-format --dry-run --Werror core/pam_shim.c portal/src/*.cpp portal/src/*.h portal/test_virtual_input.cpp
+	@echo "Checking shell scripts (shellcheck)..."
+	@uv tool run --from shellcheck-py shellcheck scripts/*.sh test/*.sh bin/hyprcrd-enroll
+	@echo "Checking security and AST safety (bandit)..."
+	@uv tool run bandit -r bin/hyprcrd core/daemon.py -s B108,B110,B404,B603,B607
+	@echo "Checking repository hygiene (binaries and secrets)..."
+	@$(PYTHON) scripts/check_hygiene.py
 
 format:
-	@uv tool run black bin/hyprcrd core/daemon.py test/unit_python/
+	@uv tool run black bin/hyprcrd core/daemon.py test/unit_python/ scripts/
 	@if command -v clang-format >/dev/null 2>&1; then \
 		clang-format -i core/pam_shim.c portal/src/*.cpp portal/src/*.h portal/*.cpp 2>/dev/null || true; \
 	fi
+
+gate: check
+
+check: lint test
+	@echo "Enforcing test coverage threshold (>= 95%)..."
+	@uv tool run --with psutil coverage report --fail-under=95
+	@echo "All quality and safety gates passed."
 
 fetch-google-deps:
 	@./scripts/fetch_google_binaries.sh

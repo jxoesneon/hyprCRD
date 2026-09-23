@@ -237,6 +237,12 @@ class TestHyprCRDCLI(unittest.TestCase):
                     mock_stop.assert_called_once()
                     mock_start.assert_called_once()
 
+    def test_18_main_version(self):
+        with patch.object(sys, "argv", ["hyprcrd", "--version"]):
+            with self.assertRaises(SystemExit) as cm:
+                hyprcrd_cli.main()
+            self.assertEqual(cm.exception.code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

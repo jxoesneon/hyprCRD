@@ -17,6 +17,8 @@ import argparse
 import subprocess
 import threading
 
+__version__ = "1.0.0-rc.1"
+
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BIN_DIR = os.path.join(BASE_DIR, "bin")
 

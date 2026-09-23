@@ -14,6 +14,8 @@ import argparse
 import subprocess
 from pathlib import Path
 
+__version__ = "1.0.0-rc.1"
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 BIN_DIR = BASE_DIR / "bin"
 CORE_DIR = BASE_DIR / "core"
@@ -291,6 +293,9 @@ def cmd_status(args):
 def main():
     print_banner()
     parser = argparse.ArgumentParser(description="hyprCRD CLI")
+    parser.add_argument(
+        "-v", "--version", action="version", version=f"hyprCRD {__version__}"
+    )
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # start

@@ -25,7 +25,7 @@
 
 | Version | Supported | Critical Fixes | Security Reviews |
 | :--- | :---: | :---: | :---: |
-| 1.0.x | Yes | Yes | Ongoing |
+| 1.0.x / 1.0.0-rc.1 | Yes | Yes | Ongoing |
 | < 1.0.0 | No | No | Deprecated |
 
 ---

@@ -1,7 +1,7 @@
 # Maintainer: Eduardo <eduardo@hyprcrd.org>
 pkgname=hyprcrd-git
 _pkgname=hyprcrd
-pkgver=1.0.0.r0.g$(date +%Y%m%d)
+pkgver=1.0.0rc1.r0.g$(date +%Y%m%d)
 pkgrel=1
 pkgdesc="Native Wayland & PipeWire Host for Google Chrome Remote Desktop on Hyprland"
 arch=('x86_64')
@@ -40,7 +40,7 @@ sha256sums=(
 
 pkgver() {
     cd "${srcdir}/hyprCRD"
-    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' || echo "1.0.0.r$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
+    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' || echo "1.0.0rc1.r$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
 }
 
 prepare() {

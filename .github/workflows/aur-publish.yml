@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   aur-publish:
@@ -20,13 +21,18 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/v}"
           echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Update PKGBUILD & .SRCINFO
+      - name: Check AUR Secrets
+        id: check_secrets
         run: |
-          cd packaging/aur
-          sed -i "s/^pkgver=.*/pkgver=${RELEASE_VERSION}/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+          if [ -z "${{ secrets.AUR_SSH_PRIVATE_KEY }}" ] || [ -z "${{ secrets.AUR_USERNAME }}" ]; then
+            echo "Notice: AUR deployment credentials not configured in repository secrets."
+            echo "configured=false" >> $GITHUB_OUTPUT
+          else
+            echo "configured=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Publish to AUR
+        if: steps.check_secrets.outputs.configured == 'true'
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
         with:
           pkgname: hyprcrd-git

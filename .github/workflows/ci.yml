@@ -97,7 +97,7 @@ jobs:
             git \
             cmake \
             ninja \
-            sdbus-c++ \
+            sdbus-cpp \
             libei \
             libxkbcommon \
             wayland \

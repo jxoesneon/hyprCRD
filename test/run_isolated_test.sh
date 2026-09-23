@@ -61,7 +61,7 @@ while [ ! -S "/run/user/1000/$TARGET_SOCKET" ]; do
     WAITED=$((WAITED + 1))
     if [ $WAITED -ge 25 ]; then
         echo -e "  ${RED}✗ Timed out waiting for /run/user/1000/$TARGET_SOCKET to initialize.${NC}"
-        cat /tmp/hyprcrd-isolated-hypr.log | tail -20
+        tail -n 20 /tmp/hyprcrd-isolated-hypr.log
         exit 1
     fi
 done
@@ -93,7 +93,7 @@ else
         PORTAL_PID=""
     else
         echo -e "  ${RED}✗ hyprcrd-portal failed to stay active.${NC}"
-        cat /tmp/hyprcrd-isolated-portal.log | tail -20
+        tail -n 20 /tmp/hyprcrd-isolated-portal.log
         exit 1
     fi
 fi

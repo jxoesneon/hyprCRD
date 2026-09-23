@@ -14,10 +14,14 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
+      - name: Install Flatpak Tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder elfutils
+
       - name: Build Flatpak
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: hyprcrd.flatpak
           manifest-path: packaging/flatpak/org.hyprland.hyprcrd.yml
           run-tests: false
-          stop-at-build-fail: true

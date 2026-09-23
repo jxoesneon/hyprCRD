@@ -1,11 +1,11 @@
-# Architectural Specification: hyprCRD (HyperCRD)
-**Native Wayland & PipeWire Host Implementation for Google Chrome Remote Desktop**
+# Architectural Specification: hyprCRD
+**Native Wayland and PipeWire Host Implementation for Google Chrome Remote Desktop**
 
 ---
 
-## Executive Architectural Summary
+## Architectural Summary
 
-`hyprCRD` provides a zero-overhead, production-grade integration layer enabling Google Chrome Remote Desktop (CRD) to operate natively within the **Hyprland Wayland compositor**. Unlike legacy implementations that confine remote sessions to synthetic, low-fidelity virtual X11 framebuffers (`Xvfb`) running window managers like Fluxbox, `hyprCRD` bridges CRD's WebRTC remoting engine directly to the host's hardware-accelerated desktop session.
+`hyprCRD` provides a native Wayland host implementation for Google Chrome Remote Desktop on Hyprland. Rather than redirecting sessions to virtual X11 framebuffers (`Xvfb`), `hyprCRD` connects the WebRTC remoting engine directly to the active hardware-accelerated desktop session.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐

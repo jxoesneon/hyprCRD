@@ -1,18 +1,19 @@
-# Contributing to hyprCRD (HyperCRD)
+# Contributing to hyprCRD
 
-Thank you for your interest in contributing to `hyprCRD`! This document outlines our institutional development standards, testing requirements, and contribution lifecycle.
+This document outlines development guidelines, style requirements, and the contribution lifecycle for `hyprCRD`.
 
 ---
 
 ## 1. Code of Conduct
 
-All contributors and maintainers are expected to uphold a professional, inclusive, and welcoming environment adhering to the [Contributor Covenant v2.1](https://www.contributor-covenant.org/). Harassment, discrimination, or abusive conduct will not be tolerated.
+Contributors and maintainers are expected to uphold a professional and welcoming environment in accordance with the [Contributor Covenant v2.1](https://www.contributor-covenant.org/).
 
 ---
 
 ## 2. Development Setup
 
-### System Prerequisites (Arch Linux)
+### Prerequisites (Arch Linux)
+
 ```bash
 sudo pacman -S --needed \
     base-devel \
@@ -26,87 +27,77 @@ sudo pacman -S --needed \
     wayland-protocols \
     pipewire \
     python \
-    python-psutil \
-    uv
+    python-psutil
 ```
 
-### Building from Source
+### Building
+
 ```bash
 git clone https://github.com/hyprcrd/hyprCRD.git
 cd hyprCRD
 
-# Build hyprcrd-portal
-cmake -B portal/build -S portal -G Ninja
-cmake --build portal/build
+# Build portal and PAM shim
+make all
 
-# Build pam_shim.so
-gcc -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so \
-    $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3 pam) -ldl
+# Download upstream Google binaries for local testing
+make fetch-google-deps
 ```
 
 ---
 
-## 3. Engineering & Style Standards
+## 3. Engineering and Style Guidelines
 
 ### C++20 (`portal/`)
-- Adhere to modern C++20 idiom (RAII, smart pointers, structured bindings).
-- No raw pointer ownership; use `std::unique_ptr` and `std::shared_ptr`.
-- Format code using `clang-format` (`-style=file`).
+- Modern C++20 idioms (RAII, smart pointers, structured bindings).
+- No unmanaged raw pointers for resource ownership.
+- Format code using `clang-format` (`.clang-format`).
 
 ### C99 (`core/pam_shim.c`)
-- Minimal, surgical footprint.
-- All dynamically intercepted symbols must provide thread-safe initialization via `dlsym` / `dlvsym`.
-- Always validate stream and parameter pointers against `NULL` to avoid crashing host processes.
+- Minimal footprint with thread-safe symbol initialization via `dlsym` / `dlvsym`.
+- Defensive parameter and stream pointer validation against `NULL`.
 
 ### Python 3 (`core/` and `bin/`)
-- Follow PEP 8 guidelines.
+- Adhere to PEP 8 standards, formatted via `black` and checked with `flake8`.
 - Target Python >= 3.10.
-- Avoid introducing third-party dependencies outside of `psutil`.
+- Restrict external dependencies to `psutil`.
 
 ---
 
-## 4. Mandatory Test Coverage Policy
+## 4. Testing and Verification Standards
 
-We enforce strict automated code coverage requirements in CI:
-- **Pass Rate**: 100% of unit and integration test suites must pass.
-- **Python Coverage**: Line coverage must remain **$\ge$ 95%** (verified via `coverage.py`).
-- **C/C++ Shim Coverage**: Line coverage must remain **$\ge$ 90%** (verified via `gcov`).
+All contributions are validated against automated test suites in CI:
+- **Suite Pass Rate**: 100% of unit and integration test suites must pass.
+- **Python Coverage**: Line coverage $\ge$ 95% (`coverage.py`).
+- **C/C++ Shim Coverage**: Line coverage $\ge$ 90% (`gcov`).
 
-### Running the Full Test Suite
-Before opening a pull request, run the master test suite locally:
+Run the test suite locally before opening a pull request:
 ```bash
-./test/run_all_tests.sh
+make test
 ```
-This executes:
-1. `run_test_pam_shim` with `gcov` instrumentation.
-2. `run_test_portal_logic` for C++ Wayland and monitor state machines.
-3. Python unit tests for PAM ctypes interception.
-4. Python daemon and CLI suites with coverage reporting.
-5. Isolated headless Wayland integration test (`test/run_isolated_test.sh`).
 
 ---
 
-## 5. Commit & Pull Request Guidelines
+## 5. Commit and Pull Request Guidelines
 
-### Commit Message Format
-We follow the [Conventional Commits](https://www.conventionalcommits.org/) standard:
-```
+### Commit Messages
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
+```text
 <type>(<scope>): <short summary>
 
 [optional body]
 
 [optional footer(s)]
 ```
+Standard prefixes:
 - `feat`: New feature or user-facing capability.
-- `fix`: Bug fix or crash resolution.
-- `docs`: Documentation improvements.
-- `refactor`: Code restructuring without behavioral changes.
-- `test`: Adding or enhancing test suites.
-- `ci`: Changes to GitHub Actions, packaging, or build automation.
+- `fix`: Defect resolution.
+- `docs`: Documentation updates.
+- `refactor`: Structural changes without behavioral alterations.
+- `test`: Addition or modification of test suites.
+- `ci`: Changes to build, packaging, or workflow configurations.
 
-### Pull Request Lifecycle
-1. Fork the repository and create a feature branch (`git checkout -b feat/my-improvement`).
-2. Implement your change with corresponding unit tests.
-3. Verify that `./test/run_all_tests.sh` passes with zero failures and required coverage thresholds.
-4. Push your branch and open a Pull Request against `main`.
-5. Address automated CI feedback and maintainer reviews.
+### Pull Request Workflow
+1. Create a feature branch (`git checkout -b feat/my-improvement`).
+2. Implement changes with corresponding test coverage.
+3. Verify that `make test` and `make lint` pass cleanly.
+4. Submit the pull request against `main`.

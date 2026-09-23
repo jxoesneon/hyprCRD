@@ -223,7 +223,7 @@ class HyprCRDDaemon:
             self.stop()
 
     def _on_sigusr1(self, signum, frame):
-        logging.info("🎉 Host received SIGUSR1: Ready to receive connections!")
+        logging.info("Host received SIGUSR1: ready for incoming connections.")
         self.host_ready = True
 
     def _on_shutdown(self, signum, frame):

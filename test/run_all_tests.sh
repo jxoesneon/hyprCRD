@@ -18,11 +18,7 @@ RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-echo -e "${CYAN}${BOLD}"
-echo "======================================================"
-echo "    hyprCRD Comprehensive Test Suite & Coverage       "
-echo "======================================================"
-echo -e "${NC}"
+echo -e "${BOLD}hyprCRD Test Suite${NC}"
 
 TOTAL_TESTS=0
 PASSED_TESTS=0
@@ -32,10 +28,10 @@ run_suite() {
     local cmd="$2"
     echo -e "\n${BLUE}▶ Running: ${BOLD}$name${NC}"
     if eval "$cmd"; then
-        echo -e "${GREEN}✓ $name PASSED${NC}"
+        echo -e "${GREEN}✓ $name passed${NC}"
         PASSED_TESTS=$((PASSED_TESTS + 1))
     else
-        echo -e "${RED}✗ $name FAILED${NC}"
+        echo -e "${RED}✗ $name failed${NC}"
         exit 1
     fi
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
@@ -92,6 +88,4 @@ fi
 run_suite "End-to-End Isolated Hyprland Session Integration Test" \
     "$BASE_DIR/test/run_isolated_test.sh"
 
-echo -e "\n${GREEN}${BOLD}======================================================${NC}"
-echo -e "${GREEN}${BOLD}  ✓ ALL TEST SUITES PASSED ($PASSED_TESTS/$TOTAL_TESTS - 100% PASS RATE)  ${NC}"
-echo -e "${GREEN}${BOLD}======================================================${NC}"
+echo -e "\n${GREEN}All test suites passed (${PASSED_TESTS}/${TOTAL_TESTS}).${NC}"

@@ -1,31 +1,33 @@
-# hyprCRD (HyperCRD)
-### Native Wayland & PipeWire Host for Google Chrome Remote Desktop on Hyprland
+# hyprCRD
+
+Native Wayland and PipeWire host for Google Chrome Remote Desktop on Hyprland.
 
 [![CI Pipeline](https://github.com/hyprcrd/hyprCRD/actions/workflows/ci.yml/badge.svg)](https://github.com/hyprcrd/hyprCRD/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](https://github.com/hyprcrd/hyprCRD)
+[![Coverage](https://img.shields.io/badge/coverage-95%25-green.svg)](https://github.com/hyprcrd/hyprCRD)
 [![AUR version](https://img.shields.io/aur/version/hyprcrd-git.svg)](https://aur.archlinux.org/packages/hyprcrd-git)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Hyprland Compatibility](https://img.shields.io/badge/Hyprland-v0.40+-blue.svg)](https://hyprland.org)
 
-`hyprCRD` is an institutional-grade, zero-overhead remoting platform that brings **1:1 native feature parity** with the official Google Chrome Remote Desktop client to **Hyprland** and Wayland on Linux. It streams your physical, GPU-accelerated Wayland desktop directly over WebRTC without sandboxing sessions into low-fidelity X11 virtual framebuffers (`Xvfb`) or legacy window managers.
+`hyprCRD` provides native host support for Google Chrome Remote Desktop on the Hyprland Wayland compositor. It streams the active hardware-accelerated desktop session directly over WebRTC, avoiding virtual X11 framebuffers (`Xvfb`) and auxiliary display environments.
 
 ---
 
-## 🏛️ Why hyprCRD?
+## Overview
 
-Historically, the official Chrome Remote Desktop package on Linux only supported legacy X11 virtual displays (`Xvfb`), isolating remote access to a disconnected, synthetic fallback desktop (such as Fluxbox or XFCE). While upstream Google CRD binaries possess experimental Wayland portal interfaces, they require `org.freedesktop.portal.RemoteDesktop` with Emulated Input System (`libei`) support—subsystems not present in standard compositor portals.
+The official Chrome Remote Desktop host for Linux historically depended on virtual X11 display servers (`Xvfb`), isolating remote access to a detached fallback desktop. While upstream binaries contain experimental Wayland interfaces, they require `org.freedesktop.portal.RemoteDesktop` with Emulated Input System (`libei`) support—subsystems not provided by standard compositor backends.
 
-**hyprCRD bridges this architectural divide:**
-1. **Core Remoting Engine (1:1 Parity)**: Employs the official Google WebRTC binaries (`libremoting_core.so`, `chrome-remote-desktop-host`, `icudtl.dat`), preserving complete compatibility with all client applications (Android, iOS, Chrome, web).
-2. **Native Screen Streaming**: Integrates with PipeWire and `xdg-desktop-portal-hyprland` for zero-copy DMA-BUF GPU capture and high-fps WebRTC encoding.
-3. **Adaptive Resolution Protection**: Surgical PAM shim (`pam_shim.so`) intercepts PipeWire renegotiation loops during client resizing, preventing stream crashes and enabling seamless client-side downscaling.
-4. **Full Input Emulation**: Custom C++20 D-Bus portal (`hyprcrd-portal`) implementing `org.freedesktop.impl.portal.RemoteDesktop` with `libei`/`libeis`, `wlr-virtual-pointer-unstable-v1`, and `virtual-keyboard-unstable-v1`.
-5. **System XKB Keymap Synthesis**: Dynamically loads the host compositor's full 35.5 KB XKB keymap into shared memory, guaranteeing exact 1:1 mapping for modifier keys (<kbd>Ctrl</kbd>, <kbd>Alt</kbd>, <kbd>Super</kbd>, <kbd>Shift</kbd>), navigation keys, and mobile function keyboards.
-6. **100% Rootless**: Runs entirely in user-space (`systemd --user`) without requiring root permissions, setuid binaries, or PAM privilege elevation.
+`hyprCRD` supplies the necessary integration layer:
+
+1. **Official Engine Integration**: Uses unmodified Google WebRTC binaries (`libremoting_core.so`, `chrome-remote-desktop-host`), maintaining protocol compatibility with standard Android, iOS, and web clients.
+2. **Native Video Streaming**: Integrates with PipeWire and `xdg-desktop-portal-hyprland` for zero-copy DMA-BUF GPU capture with software SHM fallback.
+3. **Stream Renegotiation Protection**: A lightweight preload shim (`pam_shim.so`) drops invalid dynamic format renegotiation requests when mobile or variable-geometry clients connect, avoiding capture stream interruption.
+4. **Input Emulation**: A C++20 D-Bus portal service (`hyprcrd-portal`) implementing `org.freedesktop.impl.portal.RemoteDesktop` with `libei`/`libeis`, `zwlr_virtual_pointer_v1`, and `zwp_virtual_keyboard_v1`.
+5. **Keymap Synthesis**: Compiles and uploads the compositor's active XKB keymap to shared memory, providing accurate translation for modifier combinations, function keys, and international layouts.
+6. **Unprivileged Execution**: Runs entirely within the standard user session (`systemd --user`) without requiring elevated permissions or setuid binaries.
 
 ---
 
-## 📐 Architecture Overview
+## Architecture
 
 ```mermaid
 flowchart TD
@@ -42,35 +44,36 @@ flowchart TD
     end
     
     PipeWire <-->|"DMA-BUF / SHM Capture"| XDPH["xdg-desktop-portal-hyprland"]
-    XDPH <-->|"Wayland Screencopy"| HyprlandCompositor["Hyprland Compositor (eDP-1 / 60 FPS)"]
+    XDPH <-->|"Wayland Screencopy"| HyprlandCompositor["Hyprland Compositor (Physical Output)"]
 ```
 
-For complete technical specifications, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For technical details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
-## ⚡ Feature & Parity Matrix
+## Feature Comparison
 
 | Capability | Legacy CRD (X11 / Xvfb) | Upstream Wayland | hyprCRD (Native Hyprland) |
 | :--- | :---: | :---: | :---: |
-| **WebRTC Video Codecs** (VP8, VP9, AV1) | ✅ | ✅ | ✅ **Official Google Engine** |
-| **Google FTL & OAuth Signaling** | ✅ | ✅ | ✅ **Official Google Engine** |
-| **Live Hyprland Workspace Access** | ❌ (Fluxbox / Xvfb) | ❌ (Broken input) | ✅ **Full Hardware Compositor** |
-| **PipeWire DMA-BUF 60 FPS Stream** | ❌ | ⚠️ (Crashes on resize) | ✅ **Protected via `pam_shim.so`** |
-| **Relative Pointer Motion** | ✅ | ❌ | ✅ **`zwlr-virtual-pointer-v1`** |
-| **Absolute Pointer Coordinates** | ✅ | ❌ | ✅ **Region mapped (HiDPI scale)** |
-| **Multi-button Mouse Input** | ✅ | ❌ | ✅ **Left, Right, Middle, Back, Forward** |
-| **Continuous & Discrete Scrolling** | ⚠️ Partial | ❌ | ✅ **Horizontal & Vertical notches/deltas** |
-| **System XKB Keyboard & Modifiers** | ⚠️ Generic US | ❌ | ✅ **35.5 KB system keymap synthesis** |
-| **Android/Mobile Special Keyboards** | ⚠️ Broken | ❌ | ✅ **Ctrl, Alt, Super, F1–F12, Esc, Tab** |
-| **Rootless User-Space Execution** | ❌ (Requires PAM root) | ❌ | ✅ **100% Unprivileged user service** |
-| **Automated Test Coverage** | 0% | 0% | ✅ **99% Python / 94.25% C/C++** |
+| **WebRTC Video Codecs** (VP8, VP9, AV1) | Supported | Supported | Supported (Official Engine) |
+| **Google FTL & OAuth Signaling** | Supported | Supported | Supported (Official Engine) |
+| **Active Compositor Desktop Access** | No (Xvfb fallback) | No (Input unavailable) | Supported (Native Wayland) |
+| **PipeWire DMA-BUF 60 FPS Capture** | No | Intermittent (Resize crashes) | Supported (Protected via shim) |
+| **Relative Pointer Motion** | Supported | No | Supported (`zwlr_virtual_pointer_v1`) |
+| **Absolute Coordinate Mapping** | Supported | No | Supported (Physical monitor scale) |
+| **Multi-Button Pointer Input** | Supported | No | Supported (Primary, Secondary, Middle, Extra) |
+| **Continuous and Discrete Scrolling** | Partial | No | Supported (Wheel notches and axis deltas) |
+| **System XKB Keymap and Modifiers** | Basic US | No | Supported (Compositor keymap synthesis) |
+| **Mobile Client Overlays** | Partial | No | Supported (Ctrl, Alt, Super, Function keys) |
+| **Unprivileged Execution** | No (Requires PAM root) | No | Supported (`systemd --user`) |
+| **Automated Test Coverage** | None | None | Comprehensive (95% line coverage) |
 
 ---
 
-## 📦 Installation
+## Installation
 
-### Option 1: Arch User Repository (AUR)
+### Arch User Repository (AUR)
+
 ```bash
 # Using paru
 paru -S hyprcrd-git
@@ -79,113 +82,118 @@ paru -S hyprcrd-git
 yay -S hyprcrd-git
 ```
 
-### Option 2: Flatpak
+### Flatpak
+
 ```bash
 flatpak install flathub org.hyprland.hyprcrd
 ```
 
-### Option 3: Manual Installation from Source
+### Building from Source
+
 ```bash
-# Clone the repository
-git clone https://github.com/hyprcrd/hyprCRD.git ~/hyprCRD
-cd ~/hyprCRD
+# Clone repository
+git clone https://github.com/hyprcrd/hyprCRD.git
+cd hyprCRD
 
-# Install build prerequisites
-sudo pacman -S --needed base-devel cmake ninja sdbus-c++ libei libxkbcommon wayland wayland-protocols pipewire python python-psutil uv
+# Install build dependencies (Arch Linux)
+sudo pacman -S --needed base-devel cmake ninja sdbus-c++ libei libxkbcommon wayland wayland-protocols pipewire python python-psutil
 
-# Build portal and shim
-cmake -B portal/build -S portal -G Ninja
-cmake --build portal/build
-gcc -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3 pam) -ldl
+# Build components
+make all
+
+# Download upstream Google binaries for local development
+make fetch-google-deps
 ```
 
 ---
 
-## 🚀 Quickstart Guide
+## Usage
 
-### 1. Run Diagnostics
-Validate all required libraries, D-Bus portals, and display sockets:
+### 1. Diagnostics
+Verify environment configuration, library dependencies, and compositor sockets:
 ```bash
 hyprcrd doctor
 ```
 
-### 2. Enroll Host with Google Account
-To link your machine to your Google Account, visit [remotedesktop.google.com/headless](https://remotedesktop.google.com/headless), copy the verification command, and execute:
+### 2. Host Registration
+Generate an authorization token at [remotedesktop.google.com/headless](https://remotedesktop.google.com/headless), copy the command string, and enroll the host:
 ```bash
-hyprcrd enroll "<PASTED_GOOGLE_COMMAND>"
+hyprcrd enroll "<COMMAND_STRING>"
 ```
 
-### 3. Start the Host
+### 3. Service Management
 ```bash
-# Start in background as a daemon
+# Start the background daemon
 hyprcrd start
 
-# Or run in foreground for real-time logging
+# Run in foreground for debugging
 hyprcrd start -f
+
+# Check runtime status
+hyprcrd status
+
+# Stop daemon
+hyprcrd stop
 ```
 
-### 4. Verify Service Health
-```bash
-hyprcrd status
-```
-Output:
+Example status output:
 ```text
 [hyprCRD Status]
   Daemon:         ACTIVE (PID: 3715)
   Portal Bridge:  ONLINE (PID: 1572)
-  Enrolled Host:  Empoleon (ID: 855a3928-3500-4401-8b45-1a3206d55740)
+  Enrolled Host:  workstation (ID: 855a3928-3500-4401-8b45-1a3206d55740)
 ```
 
 ---
 
-## 🔧 Systemd User Service Integration
+## Systemd Service
 
-Enable automatic background execution that starts cleanly on login:
+For automatic startup on graphical login:
 
 ```bash
 systemctl --user enable --now hyprcrd.service
 ```
 
-To view live remoting logs:
+To view service logs:
 ```bash
 journalctl --user -u hyprcrd.service -f
 ```
 
 ---
 
-## 🧪 Comprehensive Automated Testing & Code Coverage
+## Testing and Verification
 
-`hyprCRD` provides an institutional-grade, five-tier automated testing suite:
+The test harness evaluates the PAM preload shim, portal state logic, virtual input protocols, Python process management, and an isolated Wayland compositor session:
 
 ```bash
-~/hyprCRD/test/run_all_tests.sh
+make test
 ```
 
-### Verified Test Suites:
-1. **C PAM Shim & PipeWire Protection (`gcov`)**: **94.25%** line coverage verifying PAM handle bypass, PipeWire format renegotiation blocking, and D-Bus cursor transpilation.
-2. **C++ Portal Logic & State Machine**: **100%** assertion pass rate across monitor JSON parsers, XKB modifier tracking, and virtual pointer/keyboard lifecycle.
-3. **Python PAM ctypes Unit Tests**: Complete lifecycle tests for user-space PAM hooks and symbol resolution.
-4. **Python Daemon & CLI Coverage (`coverage.py`)**: **99%** line coverage covering process supervision, hardware DRM/EGL detection, signals (`SIGUSR1`, `SIGTERM`), and CLI subcommands.
-5. **End-to-End Isolated Wayland Session**: Automatically spawns an isolated nested Hyprland instance (`wayland-2`) to verify virtual input injection and Google Remoting Engine linkage without disrupting your active desktop.
+### Test Suites:
+1. **PAM Preload Shim (`gcov`)**: Verifies PAM handle interception, PipeWire parameter protection, and D-Bus message translation.
+2. **C++ Portal Logic**: Validates coordinate parsing, XKB keymap synthesis, and input controller state transitions.
+3. **Python PAM ctypes Unit Tests**: Exercises user-space PAM hooks and dynamic linking behavior.
+4. **Daemon and CLI Coverage**: Verifies process supervisor lifecycle, hardware node detection, signal handling, and argument routing.
+5. **Headless Wayland Integration**: Spawns an isolated nested Hyprland instance (`wayland-2`) to verify input injection without touching active displays.
 
 ---
 
-## 🛡️ Security & Responsible Disclosure
+## Security Policy
 
-`hyprCRD` enforces strict privilege separation:
-- All operations run strictly under the unprivileged user session.
-- Preload shims exclusively target the `chrome-remote-desktop` PAM service.
-- For vulnerability disclosures and security policies, refer to [SECURITY.md](SECURITY.md).
-
----
-
-## 🤝 Contributing
-
-Contributions, bug reports, and optimizations are warmly welcomed! Please review [CONTRIBUTING.md](CONTRIBUTING.md) for coding standards, git conventions, and test requirements.
+`hyprCRD` follows an unprivileged security model:
+- All operations execute within the unprivileged user session context.
+- Preload hooks target only the `chrome-remote-desktop` PAM service.
+- See [SECURITY.md](SECURITY.md) for vulnerability reporting procedures and response targets.
 
 ---
 
-## 📄 License & Attribution
+## Contributing
 
-- `hyprCRD` source code is licensed under the [MIT License](LICENSE).
-- Official Google Chrome Remote Desktop binaries (`chrome-remote-desktop-host`, `libremoting_core.so`, `icudtl.dat`) are proprietary software owned by Google LLC and are fetched dynamically during package build.
+Please refer to [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines, coding style, and testing requirements.
+
+---
+
+## License
+
+- Source code is available under the [MIT License](LICENSE).
+- Official Google Chrome Remote Desktop binaries (`chrome-remote-desktop-host`, `libremoting_core.so`, `icudtl.dat`) are proprietary software of Google LLC and are retrieved from upstream packages during installation.

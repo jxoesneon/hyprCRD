@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-09-22
 
 ### Added
-- **Native Hyprland Wayland Remoting**: Zero-overhead 1:1 parity with Google Chrome Remote Desktop.
+- **Native Hyprland Wayland Remoting**: Full Wayland desktop remoting support for Google Chrome Remote Desktop.
 - **PipeWire Capture Stream Negotiation**: Full hardware-accelerated DMA-BUF and SHM screen capture via `xdg-desktop-portal-hyprland`.
 - **Rootless PAM Interceptor (`pam_shim.so`)**:
   - Intercepts `pam_acct_mgmt` to enable rootless, user-space Chrome Remote Desktop host execution.

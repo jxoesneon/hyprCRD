@@ -117,6 +117,6 @@ int main() {
     
     pointer.cleanup();
     keyboard.cleanup();
-    std::cout << "✓ All Wayland virtual input tests passed cleanly!" << std::endl;
+    std::cout << "✓ All Wayland virtual input tests passed." << std::endl;
     return 0;
 }

@@ -58,14 +58,7 @@ def find_daemon():
 
 
 def print_banner():
-    print(f"{CYAN}{BOLD}")
-    print(r"""  _                              ____ ____  ____
- | |__  _   _ _ __  _ __        / ___|  _ \|  _ \
- | '_ \| | | | '_ \| '__|______| |   | |_) | | | |
- | | | | |_| | |_) | | |_______| |___|  _ <| |_| |
- |_| |_|\__, | .__/|_|          \____|_| \_\____/
-        |___/|_|                                  """)
-    print(f" Native Chrome Remote Desktop for Hyprland (1:1 Parity){NC}\n")
+    print(f"{BOLD}hyprCRD{NC} — Wayland host for Chrome Remote Desktop\n")
 
 
 def cmd_doctor(args):
@@ -150,9 +143,7 @@ def cmd_doctor(args):
 
     print()
     if all_passed:
-        print(
-            f"{GREEN}All diagnostic checks PASSED. System is ready for native hyprCRD.{NC}"
-        )
+        print(f"{GREEN}All diagnostic checks passed. System ready.{NC}")
     else:
         print(f"{YELLOW}Some components require attention.{NC}")
 

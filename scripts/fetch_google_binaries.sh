@@ -22,10 +22,10 @@ curl -fsSL -o "$TEMP_DIR/crd.deb" "$GOOGLE_DEB_URL"
 echo "▶ Verifying SHA256 checksum..."
 ACTUAL_SHA256=$(sha256sum "$TEMP_DIR/crd.deb" | awk '{print $1}')
 if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
-    echo "⚠️ Upstream checksum mismatch (expected: $EXPECTED_SHA256, actual: $ACTUAL_SHA256)"
+    echo "Notice: Upstream checksum mismatch (expected: $EXPECTED_SHA256, actual: $ACTUAL_SHA256)"
     echo "Proceeding with downloaded archive..."
 else
-    echo "✓ Checksum verified."
+    echo "Checksum verified."
 fi
 
 echo "▶ Extracting Debian payload..."
@@ -50,4 +50,4 @@ if [ -d "$DEB_ROOT/remoting_locales" ]; then
 fi
 
 chmod +x "$BIN_DIR"/chrome-remote-desktop-host "$BIN_DIR"/start-host "$BIN_DIR"/native-messaging-host 2>/dev/null || true
-echo "✓ Google Chrome Remote Desktop proprietary binaries successfully deployed to $BIN_DIR."
+echo "Binaries deployed to $BIN_DIR."

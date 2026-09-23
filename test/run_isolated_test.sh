@@ -18,9 +18,7 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${BLUE}======================================================${NC}"
-echo -e "${BLUE}        hyprCRD Isolated Testing Suite                ${NC}"
-echo -e "${BLUE}======================================================${NC}"
+echo -e "${BOLD}hyprCRD Isolated Test Session${NC}\n"
 
 TARGET_SOCKET="wayland-2"
 
@@ -106,7 +104,4 @@ CRD_VER=$(LD_LIBRARY_PATH="$BIN_DIR" LD_PRELOAD="$BIN_DIR/pam_shim.so" "$BIN_DIR
 echo -e "  ${GREEN}✓ Official Google Remoting Engine version: $CRD_VER${NC}"
 echo -e "  ${GREEN}✓ Dynamic link to libremoting_core.so and pam_shim.so verified.${NC}"
 
-echo -e "\n${GREEN}======================================================${NC}"
-echo -e "${GREEN}  ✓ ALL ISOLATED TESTS PASSED SUCCESSFULLY!          ${NC}"
-echo -e "${GREEN}  Your active Hyprland session was completely untouched.${NC}"
-echo -e "${GREEN}======================================================${NC}"
+echo -e "\n${GREEN}Isolated test suite passed (${TARGET_SOCKET}).${NC}"

@@ -1,12 +1,32 @@
+# Build outputs
+build/
 portal/build/
 *.o
+*.so
 *.so.bak
 __pycache__/
 *.pyc
 reference/
+
+# Coverage and test artifacts
 *.gcda
 *.gcno
 *.gcov
 .coverage
 test/unit/run_test_*
+
+# Google Chrome Remote Desktop proprietary binaries (fetched dynamically in packaging)
+bin/chrome-remote-desktop-host
+bin/libremoting_core.so
+bin/icudtl.dat
+bin/crashpad-handler
+bin/crashpad-db
+bin/native-messaging-host
+bin/start-host
+bin/remoting_locales/
+
+# Compiled project binaries in bin
+bin/hyprcrd-portal
+bin/pam_shim.so
+bin/test-virtual-input
 

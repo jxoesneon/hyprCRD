@@ -82,5 +82,5 @@ modules:
         path: ../..
       - type: file
         url: https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
-        sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        sha256: 572dee08ca024f922a4c35b4b028abda348c9b54f12888eaaae53f6870dd5924
         only-arches: [x86_64]

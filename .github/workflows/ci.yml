@@ -116,10 +116,14 @@ jobs:
           # 1. Build C++20 Portal with compiler warnings treated as errors
           cmake -B portal/build -S portal -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build portal/build
+          cp -f portal/build/test-virtual-input bin/ 2>/dev/null || true
 
           # 2. Build pam_shim.so
           gcc -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so \
             $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3 pam) -ldl
+
+          # 3. Fetch Google binaries for headless integration test
+          ./scripts/fetch_google_binaries.sh
 
       - name: Run Master Test Suite & Coverage Verification
         run: |

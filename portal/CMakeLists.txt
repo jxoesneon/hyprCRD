@@ -169,3 +169,7 @@ target_include_directories(test-virtual-input PRIVATE
     ${WAYLAND_CLIENT_INCLUDE_DIRS}
     ${GENERATED_DIR}
 )
+
+set_target_properties(test-virtual-input PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../bin"
+)

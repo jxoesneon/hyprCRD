@@ -1,7 +1,7 @@
-# Maintainer: Eduardo <eduardo@hyprcrd.org>
+# Maintainer: Eduardo <eduardo at hyprcrd dot org>
 pkgname=hyprcrd-git
 _pkgname=hyprcrd
-pkgver=1.0.0rc1.r0.g$(date +%Y%m%d)
+pkgver=1.0.0.rc.1.r0.g1bc9195
 pkgrel=1
 pkgdesc="Native Wayland & PipeWire Host for Google Chrome Remote Desktop on Hyprland"
 arch=('x86_64')
@@ -40,7 +40,7 @@ sha256sums=(
 
 pkgver() {
     cd "${srcdir}/hyprCRD"
-    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' || echo "1.0.0rc1.r$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
+    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' || echo "1.0.0.rc.1.r$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
 }
 
 prepare() {
@@ -61,8 +61,8 @@ build() {
     cmake --build portal/build
 
     # 2. Build Rootless PAM & PipeWire Protection Shim
-    gcc -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so \
-        $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3 pam) -ldl
+    gcc ${CFLAGS} -shared -fPIC core/pam_shim.c -o bin/pam_shim.so \
+        ${LDFLAGS} $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3 pam) -ldl
 }
 
 package() {

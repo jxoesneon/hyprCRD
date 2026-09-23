@@ -3,7 +3,7 @@ post_install() {
     echo ":: To link your machine to your Google Account, run:"
     echo "   hyprcrd enroll \"<COMMAND_FROM_remotedesktop.google.com/headless>\""
     echo "::"
-    echo ":: To enable and start the hyprCRD background remoting host:"
+    echo ":: To enable and start the hyprCRD background remoting host as a user service:"
     echo "   systemctl --user daemon-reload"
     echo "   systemctl --user enable --now hyprcrd.service"
     echo "::"
@@ -12,12 +12,12 @@ post_install() {
 }
 
 post_upgrade() {
-    echo ":: Reloading user systemd units..."
-    systemctl --user daemon-reload 2>/dev/null || true
-    echo ":: Restart hyprcrd with: systemctl --user restart hyprcrd.service"
+    echo ":: If running hyprcrd as a systemd user service, reload and restart:"
+    echo "   systemctl --user daemon-reload"
+    echo "   systemctl --user restart hyprcrd.service"
 }
 
 post_remove() {
-    echo ":: Stopping hyprcrd user service if active..."
-    systemctl --user disable --now hyprcrd.service 2>/dev/null || true
+    echo ":: If you previously enabled hyprcrd as a user service, clean up with:"
+    echo "   systemctl --user daemon-reload"
 }

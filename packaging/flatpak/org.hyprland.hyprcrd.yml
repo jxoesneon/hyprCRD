@@ -29,7 +29,29 @@ finish-args:
   # Host configuration access
   - --filesystem=xdg-config/chrome-remote-desktop:create
 
+build-options:
+  env:
+    PYTHONPATH: /app/lib/python3.12/site-packages
+
 modules:
+  - name: python-build-deps
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib/python3.12/site-packages
+      - python3 -m zipfile -e attrs-24.2.0-py3-none-any.whl /app/lib/python3.12/site-packages
+      - python3 -m zipfile -e MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl /app/lib/python3.12/site-packages
+      - python3 -m zipfile -e jinja2-3.1.4-py3-none-any.whl /app/lib/python3.12/site-packages
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/6a/21/5b6702a7f963e95456c0de2d495f67bf5fd62840ac655dc451586d23d39a/attrs-24.2.0-py3-none-any.whl
+        sha256: 81921eb96de3191c8258c199618104dd27ac608d9366f5e35d011eae1867ede2
+      - type: file
+        url: https://files.pythonhosted.org/packages/0a/0d/2454f072fae3b5a137c119abf15465d1771319dfe9e4acbb31722a0fff91/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+        sha256: f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5
+      - type: file
+        url: https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl
+        sha256: bc5dd2abb727a5319567b7a813e6a2e7318c39f4f487cfe6c89c6f9c7d25197d
+
   - name: sdbus-cpp
     buildsystem: cmake-ninja
     config-opts:
@@ -44,6 +66,9 @@ modules:
 
   - name: libei
     buildsystem: meson
+    build-options:
+      env:
+        PYTHONPATH: /app/lib/python3.12/site-packages
     config-opts:
       - -Dliboeffis=disabled
       - -Dtests=disabled

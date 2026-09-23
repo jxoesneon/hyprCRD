@@ -19,6 +19,7 @@ pkg_check_modules(WAYLAND_PROTOCOLS REQUIRED wayland-protocols)
 pkg_check_modules(LIBEI REQUIRED libei-1.0)
 pkg_check_modules(LIBEIS REQUIRED libeis-1.0)
 pkg_check_modules(SDBUSCPP REQUIRED sdbus-c++)
+pkg_check_modules(XKBCOMMON REQUIRED xkbcommon)
 
 # Find wayland-scanner
 find_program(WAYLAND_SCANNER wayland-scanner)
@@ -107,6 +108,7 @@ include_directories(
     ${LIBEI_INCLUDE_DIRS}
     ${LIBEIS_INCLUDE_DIRS}
     ${SDBUSCPP_INCLUDE_DIRS}
+    ${XKBCOMMON_INCLUDE_DIRS}
     ${GENERATED_DIR}
 )
 
@@ -116,6 +118,7 @@ link_directories(
     ${LIBEI_LIBRARY_DIRS}
     ${LIBEIS_LIBRARY_DIRS}
     ${SDBUSCPP_LIBRARY_DIRS}
+    ${XKBCOMMON_LIBRARY_DIRS}
 )
 
 # Main executable
@@ -137,6 +140,7 @@ target_link_libraries(xdg-desktop-portal-hypr-remote
     ${LIBEI_LIBRARIES}
     ${LIBEIS_LIBRARIES}
     ${SDBUSCPP_LIBRARIES}
+    ${XKBCOMMON_LIBRARIES}
 )
 
 set_target_properties(xdg-desktop-portal-hypr-remote PROPERTIES 
@@ -157,6 +161,7 @@ add_dependencies(test-virtual-input generate_protocols)
 target_link_libraries(test-virtual-input
     wayland_protocols
     ${WAYLAND_CLIENT_LIBRARIES}
+    ${XKBCOMMON_LIBRARIES}
 )
 
 target_include_directories(test-virtual-input PRIVATE

@@ -114,9 +114,9 @@ void WaylandVirtualPointer::send_button(uint32_t time, uint32_t button, uint32_t
     }
 }
 
-void WaylandVirtualPointer::send_axis(uint32_t time, uint32_t axis, double dx, double dy) {
+void WaylandVirtualPointer::send_axis(uint32_t time, uint32_t axis, double value) {
     if (virtual_pointer) {
-        zwlr_virtual_pointer_v1_axis(virtual_pointer, time, axis, wl_fixed_from_double(dx));
+        zwlr_virtual_pointer_v1_axis(virtual_pointer, time, axis, wl_fixed_from_double(value));
     }
 }
 
@@ -127,12 +127,14 @@ void WaylandVirtualPointer::send_axis_source(uint32_t axis_source) {
 }
 
 void WaylandVirtualPointer::send_axis_discrete(uint32_t time, int32_t dx, int32_t dy) {
-    std::cout << "send_axis_discrete: dx=" << dx << " dy=" << dy << std::endl;
     if (virtual_pointer) {
-        if(dy < 0) {
-            zwlr_virtual_pointer_v1_axis_discrete(virtual_pointer, time, WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_int(-15), -1);
-        } else if(dy > 0) {
-            zwlr_virtual_pointer_v1_axis_discrete(virtual_pointer, time, WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_int(15), 1);
+        if (dy != 0) {
+            zwlr_virtual_pointer_v1_axis_discrete(virtual_pointer, time,
+                WL_POINTER_AXIS_VERTICAL_SCROLL, wl_fixed_from_int(dy * 15), dy);
+        }
+        if (dx != 0) {
+            zwlr_virtual_pointer_v1_axis_discrete(virtual_pointer, time,
+                WL_POINTER_AXIS_HORIZONTAL_SCROLL, wl_fixed_from_int(dx * 15), dx);
         }
     }
 }

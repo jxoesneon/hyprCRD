@@ -3,3 +3,10 @@ portal/build/
 *.so.bak
 __pycache__/
 *.pyc
+reference/
+*.gcda
+*.gcno
+*.gcov
+.coverage
+test/unit/run_test_*
+

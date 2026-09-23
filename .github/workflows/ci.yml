@@ -1,0 +1,106 @@
+name: hyprCRD CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  code-quality:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Linting Tools
+        run: |
+          pip install black flake8
+
+      - name: Run Python Format Check
+        run: |
+          black --check bin/hyprcrd core/daemon.py test/unit_python/
+
+      - name: Run Python Lint
+        run: |
+          flake8 bin/hyprcrd core/daemon.py test/unit_python/ --count --max-line-length=140 --statistics
+
+  build-and-test:
+    name: Arch Linux Build & 100% Test Suite
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Update System & Install Dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm \
+            base-devel \
+            git \
+            cmake \
+            ninja \
+            sdbus-c++ \
+            libei \
+            libxkbcommon \
+            wayland \
+            wayland-protocols \
+            pipewire \
+            python \
+            python-psutil \
+            uv \
+            gdb
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Pre-build Portal & PAM Shim
+        run: |
+          # 1. Build C++20 Portal
+          cmake -B portal/build -S portal -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build portal/build
+
+          # 2. Build pam_shim.so
+          gcc -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so \
+            $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3 pam) -ldl
+
+      - name: Run Master Test Suite & Coverage Verification
+        run: |
+          # Make test runners executable
+          chmod +x test/run_all_tests.sh test/run_isolated_test.sh
+          
+          # Execute master test runner
+          ./test/run_all_tests.sh
+
+      - name: Enforce Coverage Thresholds
+        run: |
+          # Python coverage threshold check
+          uv tool run --with psutil coverage report --fail-under=95
+
+  aur-package-lint:
+    name: AUR PKGBUILD Validation
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install Packaging Utilities
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm base-devel namcap git
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate PKGBUILD with namcap
+        run: |
+          cd packaging/aur
+          namcap PKGBUILD

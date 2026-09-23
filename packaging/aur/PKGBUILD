@@ -1,0 +1,99 @@
+# Maintainer: Eduardo <eduardo@hyprcrd.org>
+pkgname=hyprcrd-git
+_pkgname=hyprcrd
+pkgver=1.0.0.r0.g$(date +%Y%m%d)
+pkgrel=1
+pkgdesc="Native Wayland & PipeWire Host for Google Chrome Remote Desktop on Hyprland"
+arch=('x86_64')
+url="https://github.com/hyprcrd/hyprCRD"
+license=('MIT' 'custom:google-chrome')
+depends=(
+    'pipewire'
+    'xdg-desktop-portal-hyprland'
+    'sdbus-c++'
+    'libei'
+    'libxkbcommon'
+    'wayland'
+    'python'
+    'python-psutil'
+)
+makedepends=(
+    'git'
+    'cmake'
+    'ninja'
+    'wayland-protocols'
+    'binutils'
+    'gcc'
+    'pkgconf'
+)
+provides=('hyprcrd')
+conflicts=('hyprcrd')
+install=hyprcrd.install
+source=(
+    "git+https://github.com/hyprcrd/hyprCRD.git"
+    "https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb"
+)
+sha256sums=(
+    'SKIP'
+    'SKIP'
+)
+
+pkgver() {
+    cd "${srcdir}/hyprCRD"
+    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' || echo "1.0.0.r$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+    cd "${srcdir}"
+    # Unpack official Google Chrome Remote Desktop debian package
+    bsdtar -xf chrome-remote-desktop_current_amd64.deb data.tar.xz
+    mkdir -p crd-deb-data
+    bsdtar -xf data.tar.xz -C crd-deb-data
+}
+
+build() {
+    cd "${srcdir}/hyprCRD"
+    
+    # 1. Build C++20 Portal Bridge
+    cmake -B portal/build -S portal -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build portal/build
+
+    # 2. Build Rootless PAM & PipeWire Protection Shim
+    gcc -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so \
+        $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3 pam) -ldl
+}
+
+package() {
+    cd "${srcdir}/hyprCRD"
+
+    # Directory structures
+    install -dm755 "${pkgdir}/usr/bin"
+    install -dm755 "${pkgdir}/usr/lib/hyprcrd"
+    install -dm755 "${pkgdir}/usr/lib/systemd/user"
+    install -dm755 "${pkgdir}/usr/share/licenses/${pkgname}"
+    install -dm755 "${pkgdir}/usr/share/xdg-desktop-portal/portals"
+    install -dm755 "${pkgdir}/usr/share/dbus-1/services"
+
+    # Install compiled hyprCRD components
+    install -m755 bin/hyprcrd-portal "${pkgdir}/usr/lib/hyprcrd/hyprcrd-portal"
+    install -m755 bin/pam_shim.so "${pkgdir}/usr/lib/hyprcrd/pam_shim.so"
+    install -m755 core/daemon.py "${pkgdir}/usr/lib/hyprcrd/daemon.py"
+    install -m755 bin/hyprcrd "${pkgdir}/usr/bin/hyprcrd"
+
+    # Install official Google binaries extracted from .deb
+    local DEB_ROOT="${srcdir}/crd-deb-data/opt/google/chrome-remote-desktop"
+    install -m755 "${DEB_ROOT}/chrome-remote-desktop-host" "${pkgdir}/usr/lib/hyprcrd/chrome-remote-desktop-host"
+    install -m644 "${DEB_ROOT}/libremoting_core.so" "${pkgdir}/usr/lib/hyprcrd/libremoting_core.so"
+    install -m644 "${DEB_ROOT}/icudtl.dat" "${pkgdir}/usr/lib/hyprcrd/icudtl.dat"
+    
+    if [ -d "${DEB_ROOT}/remoting_locales" ]; then
+        cp -r "${DEB_ROOT}/remoting_locales" "${pkgdir}/usr/lib/hyprcrd/"
+    fi
+
+    # Install D-Bus Portal & Systemd units
+    install -m644 config/hypr-remote.portal "${pkgdir}/usr/share/xdg-desktop-portal/portals/hypr-remote.portal"
+    install -m644 systemd/hyprcrd.service "${pkgdir}/usr/lib/systemd/user/hyprcrd.service"
+    install -m644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

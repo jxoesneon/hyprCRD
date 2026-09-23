@@ -94,21 +94,43 @@ void WaylandVirtualKeyboard::cleanup() {
     }
 }
 
+#include <xkbcommon/xkbcommon.h>
+
 bool WaylandVirtualKeyboard::setup_keymap() {
     if (!virtual_keyboard) return false;
 
-    size_t keymap_size = strlen(keymap_str) + 1;
+    char* allocated_keymap = nullptr;
+    size_t keymap_size = 0;
+    const char* target_keymap = keymap_str;
+
+    struct xkb_context* ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (ctx) {
+        struct xkb_rule_names names = {};
+        struct xkb_keymap* km = xkb_keymap_new_from_names(ctx, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        if (km) {
+            allocated_keymap = xkb_keymap_get_as_string(km, XKB_KEYMAP_FORMAT_TEXT_V1);
+            if (allocated_keymap) {
+                target_keymap = allocated_keymap;
+            }
+            xkb_keymap_unref(km);
+        }
+        xkb_context_unref(ctx);
+    }
+
+    keymap_size = strlen(target_keymap) + 1;
     
     // Create shared memory file
     int fd = memfd_create("keymap", MFD_CLOEXEC);
     if (fd < 0) {
         std::cerr << "Failed to create memfd" << std::endl;
+        if (allocated_keymap) free(allocated_keymap);
         return false;
     }
 
     if (ftruncate(fd, keymap_size) < 0) {
         std::cerr << "Failed to resize memfd" << std::endl;
         close(fd);
+        if (allocated_keymap) free(allocated_keymap);
         return false;
     }
 
@@ -116,11 +138,16 @@ bool WaylandVirtualKeyboard::setup_keymap() {
     if (data == MAP_FAILED) {
         std::cerr << "Failed to mmap keymap" << std::endl;
         close(fd);
+        if (allocated_keymap) free(allocated_keymap);
         return false;
     }
 
-    strcpy(static_cast<char*>(data), keymap_str);
+    memcpy(data, target_keymap, keymap_size);
     munmap(data, keymap_size);
+
+    if (allocated_keymap) {
+        free(allocated_keymap);
+    }
 
     // Send keymap to compositor
     zwp_virtual_keyboard_v1_keymap(virtual_keyboard, 1, fd, keymap_size); // XKB_KEYMAP_FORMAT_TEXT_V1 = 1

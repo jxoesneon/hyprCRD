@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <security/pam_appl.h>
 #include <gio/gio.h>
+#include <pipewire/pipewire.h>
+#include <errno.h>
 
 /* --- PAM Hooking --- */
 static pam_handle_t *crd_handles[16];
@@ -40,6 +42,93 @@ int pam_end(pam_handle_t *handle, int status) {
   return real(handle, status);
 }
 
+/* --- PipeWire Stream Renegotiation Protection --- */
+/*
+ * On Wayland/Hyprland, screen capture streams originate from physical monitors
+ * (e.g. eDP-1 at 2560x1600). When a remote client (e.g. Android phone) connects,
+ * it sends a ClientResolution message with its phone dimensions (e.g. 1440x2560).
+ * CRD's PortalDesktopResizer erroneously attempts to renegotiate the PipeWire stream
+ * resolution by calling pw_stream_update_params while the stream is already streaming.
+ * xdg-desktop-portal-hyprland cannot resize physical display capture streams, causing
+ * PipeWire to error out with "no more input formats" and permanently kill the stream
+ * after the first frame.
+ *
+ * We intercept pw_stream_update_params: if the stream is already actively STREAMING,
+ * we drop the resolution renegotiation and return 0 (success). WebRTC's video encoder
+ * automatically handles client scaling without crashing the PipeWire capture stream.
+ */
+static int (*real_pw_stream_update_params)(struct pw_stream *,
+                                           const struct spa_pod **,
+                                           uint32_t) = NULL;
+static enum pw_stream_state (*real_pw_stream_get_state)(struct pw_stream *,
+                                                        const char **) = NULL;
+
+#ifdef TESTING_COVERAGE
+void set_mock_pw_stream_state(enum pw_stream_state (*fn)(struct pw_stream *, const char **)) {
+  real_pw_stream_get_state = fn;
+}
+#endif
+
+static void init_pw_symbols(void) {
+  if (!real_pw_stream_update_params) {
+    void *(*sys_dlsym)(void *, const char *) = dlvsym(RTLD_NEXT, "dlsym", "GLIBC_2.34");
+    if (!sys_dlsym) sys_dlsym = dlvsym(RTLD_NEXT, "dlsym", "GLIBC_2.2.5");
+    if (sys_dlsym) {
+      void *pw_lib = dlopen("libpipewire-0.3.so.0", RTLD_LAZY | RTLD_GLOBAL);
+      if (pw_lib) {
+        real_pw_stream_update_params = sys_dlsym(pw_lib, "pw_stream_update_params");
+        real_pw_stream_get_state = sys_dlsym(pw_lib, "pw_stream_get_state");
+      }
+      if (!real_pw_stream_update_params) {
+        real_pw_stream_update_params = sys_dlsym(RTLD_NEXT, "pw_stream_update_params");
+      }
+      if (!real_pw_stream_get_state) {
+        real_pw_stream_get_state = sys_dlsym(RTLD_NEXT, "pw_stream_get_state");
+      }
+    }
+  }
+}
+
+int pw_stream_update_params(struct pw_stream *stream,
+                            const struct spa_pod **params,
+                            uint32_t n_params) {
+  if (!stream) {
+    return -EINVAL;
+  }
+  init_pw_symbols();
+
+  if (stream && real_pw_stream_get_state) {
+    const char *err = NULL;
+    enum pw_stream_state state = real_pw_stream_get_state(stream, &err);
+    if (state == PW_STREAM_STATE_STREAMING) {
+      fprintf(stderr, "[pam_shim] Blocked pw_stream_update_params while STREAMING (prevented stream crash on resize)\n");
+      return 0; /* Report success without crashing PipeWire stream */
+    }
+  }
+
+  if (real_pw_stream_update_params) {
+    return real_pw_stream_update_params(stream, params, n_params);
+  }
+  return 0;
+}
+
+void *dlsym(void *handle, const char *name) {
+  static void *(*real_dlsym)(void *, const char *) = NULL;
+  if (!real_dlsym) {
+    real_dlsym = dlvsym(RTLD_NEXT, "dlsym", "GLIBC_2.34");
+    if (!real_dlsym) {
+      real_dlsym = dlvsym(RTLD_NEXT, "dlsym", "GLIBC_2.2.5");
+    }
+  }
+
+  if (name && strcmp(name, "pw_stream_update_params") == 0) {
+    return (void *)pw_stream_update_params;
+  }
+
+  return real_dlsym ? real_dlsym(handle, name) : NULL;
+}
+
+
 /* --- GLib GDBus ScreenCast cursor_mode Hooking --- */
 /*
  * Google Chrome Remote Desktop requests cursor_mode = 4 (METADATA) in
@@ -49,7 +138,7 @@ int pam_end(pam_handle_t *handle, int status) {
  * We rewrite cursor_mode = 4 to cursor_mode = 2 (EMBEDDED) so the screen capture
  * is accepted by xdg-desktop-portal and streamed via PipeWire.
  */
-static GVariant *patch_screencast_select_sources(GVariant *parameters) {
+GVariant *patch_screencast_select_sources(GVariant *parameters) {
   if (!parameters) return parameters;
   if (!g_variant_is_of_type(parameters, G_VARIANT_TYPE("(oa{sv})"))) {
     return parameters;

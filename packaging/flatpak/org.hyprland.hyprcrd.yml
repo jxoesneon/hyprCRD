@@ -1,0 +1,86 @@
+app-id: org.hyprland.hyprcrd
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: hyprcrd
+
+finish-args:
+  # Network & IPC
+  - --share=network
+  - --share=ipc
+
+  # Wayland compositor access
+  - --socket=wayland
+  - --socket=fallback-x11
+
+  # Audio via PipeWire / PulseAudio
+  - --socket=pulseaudio
+
+  # Hardware acceleration & DRM for DMA-BUF capture
+  - --device=dri
+
+  # D-Bus session communication for portals
+  - --socket=session-bus
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --talk-name=org.freedesktop.impl.portal.desktop.hyprland
+  - --talk-name=org.freedesktop.DBus
+  - --own-name=org.freedesktop.impl.portal.desktop.hypr-remote
+
+  # Host configuration access
+  - --filesystem=xdg-config/chrome-remote-desktop:create
+
+modules:
+  - name: sdbus-cpp
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_CODE_GEN=OFF
+      - -DBUILD_DOC=OFF
+      - -DBUILD_TESTS=OFF
+    sources:
+      - type: git
+        url: https://github.com/Kistler-Group/sdbus-cpp.git
+        tag: v2.0.0
+
+  - name: libei
+    buildsystem: meson
+    config-opts:
+      - -Dliboeffis=disabled
+      - -Dtests=disabled
+      - -Ddocumentation=disabled
+    sources:
+      - type: git
+        url: https://gitlab.freedesktop.org/libinput/libei.git
+        tag: 1.3.0
+
+  - name: hyprcrd
+    buildsystem: simple
+    build-commands:
+      # Unpack official Chrome Remote Desktop debian package
+      - bsdtar -xf chrome-remote-desktop_current_amd64.deb data.tar.xz
+      - mkdir -p crd-deb-data && bsdtar -xf data.tar.xz -C crd-deb-data
+      
+      # Build portal
+      - cmake -B portal/build -S portal -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - cmake --build portal/build
+
+      # Build PAM shim
+      - gcc -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3 pam) -ldl
+
+      # Install files
+      - install -dm755 /app/bin /app/lib/hyprcrd /app/share/applications /app/share/icons/hicolor/scalable/apps
+      - install -m755 bin/hyprcrd /app/bin/hyprcrd
+      - install -m755 bin/hyprcrd-portal /app/lib/hyprcrd/hyprcrd-portal
+      - install -m755 bin/pam_shim.so /app/lib/hyprcrd/pam_shim.so
+      - install -m755 core/daemon.py /app/lib/hyprcrd/daemon.py
+      - install -m755 crd-deb-data/opt/google/chrome-remote-desktop/chrome-remote-desktop-host /app/lib/hyprcrd/chrome-remote-desktop-host
+      - install -m644 crd-deb-data/opt/google/chrome-remote-desktop/libremoting_core.so /app/lib/hyprcrd/libremoting_core.so
+      - install -m644 crd-deb-data/opt/google/chrome-remote-desktop/icudtl.dat /app/lib/hyprcrd/icudtl.dat
+      - cp -r crd-deb-data/opt/google/chrome-remote-desktop/remoting_locales /app/lib/hyprcrd/
+    sources:
+      - type: dir
+        path: ../..
+      - type: file
+        url: https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
+        sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        only-arches: [x86_64]

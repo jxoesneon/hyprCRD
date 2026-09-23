@@ -1,0 +1,23 @@
+post_install() {
+    echo ":: hyprCRD has been installed."
+    echo ":: To link your machine to your Google Account, run:"
+    echo "   hyprcrd enroll \"<COMMAND_FROM_remotedesktop.google.com/headless>\""
+    echo "::"
+    echo ":: To enable and start the hyprCRD background remoting host:"
+    echo "   systemctl --user daemon-reload"
+    echo "   systemctl --user enable --now hyprcrd.service"
+    echo "::"
+    echo ":: To verify runtime diagnostics:"
+    echo "   hyprcrd doctor"
+}
+
+post_upgrade() {
+    echo ":: Reloading user systemd units..."
+    systemctl --user daemon-reload 2>/dev/null || true
+    echo ":: Restart hyprcrd with: systemctl --user restart hyprcrd.service"
+}
+
+post_remove() {
+    echo ":: Stopping hyprcrd user service if active..."
+    systemctl --user disable --now hyprcrd.service 2>/dev/null || true
+}

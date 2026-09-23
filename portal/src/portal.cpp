@@ -20,6 +20,7 @@ extern "C" {
 #include <libei.h>
 #include "libei-1.0/libeis.h"
 #include <wayland-client-protocol.h>
+#include <xkbcommon/xkbcommon.h>
 }
 
 static const char* PORTAL_INTERFACE = "org.freedesktop.impl.portal.RemoteDesktop";
@@ -325,11 +326,11 @@ void Portal::NotifyPointerAxis(
     if (libei_handler && libei_handler->pointer) {
         libei_handler->pointer->send_axis_source(WL_POINTER_AXIS_SOURCE_WHEEL);
         if (dx != 0.0) {
-            libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, dx, dy);
+            libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, dx);
             libei_handler->pointer->send_axis_stop(time, WL_POINTER_AXIS_HORIZONTAL_SCROLL);
         }
         if (dy != 0.0) {
-            libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_VERTICAL_SCROLL, dx, dy);
+            libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_VERTICAL_SCROLL, dy);
             libei_handler->pointer->send_axis_stop(time, WL_POINTER_AXIS_VERTICAL_SCROLL);
         }
         libei_handler->pointer->send_frame();
@@ -446,7 +447,39 @@ void Portal::handle_eis_event(struct eis_event* event) {
             eis_device_configure_name(keyboard, "Hyprland Portal Keyboard");
             eis_device_configure_capability(keyboard, EIS_DEVICE_CAP_KEYBOARD);
             
-            const char* keymap_str = 
+            // Build keymap from the system's active XKB configuration so Google CRD
+            // can construct a full KeyboardLayout proto (Ctrl, Alt, Super, Fn keys etc.).
+            char* keymap_str_alloc = nullptr;
+            size_t keymap_size = 0;
+            {
+                struct xkb_context* xkb_ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+                if (xkb_ctx) {
+                    // NULL names → use system defaults (respects XKBLAYOUT env var etc.)
+                    struct xkb_rule_names names = {};
+                    struct xkb_keymap* xkb_km = xkb_keymap_new_from_names(
+                        xkb_ctx, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+                    if (xkb_km) {
+                        keymap_str_alloc = xkb_keymap_get_as_string(
+                            xkb_km, XKB_KEYMAP_FORMAT_TEXT_V1);
+                        if (keymap_str_alloc) {
+                            keymap_size = strlen(keymap_str_alloc) + 1; // include NUL
+                            std::cout << "[portal] XKB keymap loaded (" << keymap_size
+                                      << " bytes)" << std::endl;
+                        } else {
+                            std::cerr << "[portal] xkb_keymap_get_as_string failed" << std::endl;
+                        }
+                        xkb_keymap_unref(xkb_km);
+                    } else {
+                        std::cerr << "[portal] xkb_keymap_new_from_names failed" << std::endl;
+                    }
+                    xkb_context_unref(xkb_ctx);
+                } else {
+                    std::cerr << "[portal] xkb_context_new failed" << std::endl;
+                }
+            }
+
+            // Fallback: minimal keymap if xkbcommon failed
+            const char* keymap_fallback =
                 "xkb_keymap {\n"
                 "xkb_keycodes  { include \"evdev+aliases(qwerty)\" };\n"
                 "xkb_types     { include \"complete\" };\n"
@@ -454,21 +487,39 @@ void Portal::handle_eis_event(struct eis_event* event) {
                 "xkb_symbols   { include \"pc+us+inet(evdev)\" };\n"
                 "xkb_geometry  { include \"pc(pc105)\" };\n"
                 "};\n";
-                
-            size_t keymap_size = strlen(keymap_str);
+
+            const char* keymap_to_write = keymap_str_alloc
+                ? keymap_str_alloc
+                : keymap_fallback;
+            if (!keymap_str_alloc) {
+                keymap_size = strlen(keymap_fallback) + 1;
+                std::cerr << "[portal] Using fallback keymap" << std::endl;
+            }
+
             int memfd = memfd_create("keymap", MFD_CLOEXEC | MFD_ALLOW_SEALING);
             if (memfd >= 0) {
-                if (write(memfd, keymap_str, keymap_size) == (ssize_t)keymap_size) {
+                if (write(memfd, keymap_to_write, keymap_size) == (ssize_t)keymap_size) {
                     lseek(memfd, 0, SEEK_SET);
-                    struct eis_keymap* keymap = eis_device_new_keymap(keyboard, 
+                    struct eis_keymap* keymap = eis_device_new_keymap(keyboard,
                         EIS_KEYMAP_TYPE_XKB, memfd, keymap_size);
                     if (keymap) {
                         eis_keymap_add(keymap);
                         eis_keymap_unref(keymap);
+                    } else {
+                        std::cerr << "[portal] eis_device_new_keymap failed" << std::endl;
                     }
+                } else {
+                    std::cerr << "[portal] write keymap to memfd failed: " << strerror(errno) << std::endl;
                 }
                 close(memfd);
+            } else {
+                std::cerr << "[portal] memfd_create failed: " << strerror(errno) << std::endl;
             }
+
+            if (keymap_str_alloc) {
+                free(keymap_str_alloc);
+            }
+
             
             eis_device_add(keyboard);
             eis_device_resume(keyboard);
@@ -526,11 +577,11 @@ void Portal::handle_eis_event(struct eis_event* event) {
                 libei_handler->pointer->send_axis_source(WL_POINTER_AXIS_SOURCE_WHEEL);
                 double scale_factor = 15.0;
                 if (dx != 0.0) {
-                    libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, dx * scale_factor, dy);
+                    libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, dx * scale_factor);
                     libei_handler->pointer->send_axis_stop(time, WL_POINTER_AXIS_HORIZONTAL_SCROLL);
                 }
                 if (dy != 0.0) {
-                    libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_VERTICAL_SCROLL, dx * scale_factor, dy);
+                    libei_handler->pointer->send_axis(time, WL_POINTER_AXIS_VERTICAL_SCROLL, dy * scale_factor);
                     libei_handler->pointer->send_axis_stop(time, WL_POINTER_AXIS_VERTICAL_SCROLL);
                 }
                 libei_handler->pointer->send_frame();

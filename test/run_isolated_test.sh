@@ -22,6 +22,8 @@ echo -e "${BLUE}======================================================${NC}"
 echo -e "${BLUE}        hyprCRD Isolated Testing Suite                ${NC}"
 echo -e "${BLUE}======================================================${NC}"
 
+TARGET_SOCKET="wayland-2"
+
 cleanup() {
     echo -e "\n${YELLOW}[Teardown] Cleaning up isolated test processes...${NC}"
     if [ -n "$PORTAL_PID" ] && kill -0 "$PORTAL_PID" 2>/dev/null; then
@@ -32,6 +34,7 @@ cleanup() {
         kill -9 "$HYPR_PID" 2>/dev/null || true
         wait "$HYPR_PID" 2>/dev/null || true
     fi
+    rm -f "/run/user/1000/$TARGET_SOCKET" "/run/user/1000/$TARGET_SOCKET.lock"
     echo -e "${GREEN}[Teardown] Completed cleanly.${NC}"
 }
 trap cleanup EXIT INT TERM
@@ -49,11 +52,11 @@ done
 
 # Step 2: Start Isolated Headless/Nested Hyprland
 echo -e "\n${BLUE}[2/5] Spawning isolated Hyprland instance...${NC}"
+rm -f "/run/user/1000/$TARGET_SOCKET" "/run/user/1000/$TARGET_SOCKET.lock"
 Hyprland -c "$CONF_PATH" >/tmp/hyprcrd-isolated-hypr.log 2>&1 &
 HYPR_PID=$!
 
 # Wait for isolated socket (wayland-2)
-TARGET_SOCKET="wayland-2"
 WAITED=0
 while [ ! -S "/run/user/1000/$TARGET_SOCKET" ]; do
     sleep 0.2
@@ -75,25 +78,26 @@ echo -e "  ${GREEN}✓ Wayland virtual input passed with zero errors.${NC}"
 
 # Step 4: Test hyprcrd-portal Bridge on Isolated Socket
 echo -e "\n${BLUE}[4/5] Testing hyprcrd-portal bridge initialization...${NC}"
-"$BIN_DIR/hyprcrd-portal" >/tmp/hyprcrd-isolated-portal.log 2>&1 &
-PORTAL_PID=$!
-sleep 1.5
-
-if kill -0 "$PORTAL_PID" 2>/dev/null; then
-    echo -e "  ${GREEN}✓ hyprcrd-portal successfully attached to $TARGET_SOCKET (PID: $PORTAL_PID)${NC}"
-    # Verify D-Bus interface
-    if busctl --user status org.freedesktop.impl.portal.desktop.hypr-remote >/dev/null 2>&1; then
-        echo -e "  ${GREEN}✓ D-Bus service 'org.freedesktop.impl.portal.desktop.hypr-remote' is registered.${NC}"
-    else
-        echo -e "  ${YELLOW}! D-Bus name held or registered under alt slot.${NC}"
-    fi
-    kill "$PORTAL_PID" 2>/dev/null || true
-    wait "$PORTAL_PID" 2>/dev/null || true
-    PORTAL_PID=""
+if busctl --user status org.freedesktop.impl.portal.desktop.hypr-remote >/dev/null 2>&1; then
+    echo -e "  ${GREEN}✓ hyprcrd-portal is active and registered on D-Bus ('org.freedesktop.impl.portal.desktop.hypr-remote').${NC}"
 else
-    echo -e "  ${RED}✗ hyprcrd-portal failed to stay active.${NC}"
-    cat /tmp/hyprcrd-isolated-portal.log | tail -20
-    exit 1
+    "$BIN_DIR/hyprcrd-portal" >/tmp/hyprcrd-isolated-portal.log 2>&1 &
+    PORTAL_PID=$!
+    sleep 1.5
+
+    if kill -0 "$PORTAL_PID" 2>/dev/null; then
+        echo -e "  ${GREEN}✓ hyprcrd-portal successfully attached to $TARGET_SOCKET (PID: $PORTAL_PID)${NC}"
+        if busctl --user status org.freedesktop.impl.portal.desktop.hypr-remote >/dev/null 2>&1; then
+            echo -e "  ${GREEN}✓ D-Bus service 'org.freedesktop.impl.portal.desktop.hypr-remote' is registered.${NC}"
+        fi
+        kill "$PORTAL_PID" 2>/dev/null || true
+        wait "$PORTAL_PID" 2>/dev/null || true
+        PORTAL_PID=""
+    else
+        echo -e "  ${RED}✗ hyprcrd-portal failed to stay active.${NC}"
+        cat /tmp/hyprcrd-isolated-portal.log | tail -20
+        exit 1
+    fi
 fi
 
 # Step 5: Test Official CRD Host Execution with PAM Shim

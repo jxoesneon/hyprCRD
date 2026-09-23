@@ -19,20 +19,40 @@ import threading
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BIN_DIR = os.path.join(BASE_DIR, "bin")
-HOST_BINARY = os.path.join(BIN_DIR, "chrome-remote-desktop-host")
-PORTAL_BINARY = os.path.join(BIN_DIR, "hyprcrd-portal")
-PAM_SHIM = os.path.join(BIN_DIR, "pam_shim.so")
+
+
+def _find_component(name):
+    env_name = "HYPRCRD_" + name.upper().replace("-", "_").replace(".", "_")
+    if os.environ.get(env_name) and os.path.exists(os.environ[env_name]):
+        return os.environ[env_name]
+    for candidate in [
+        os.path.join(BIN_DIR, name),
+        os.path.join(os.path.dirname(__file__), name),
+        os.path.join("/usr/lib/hyprcrd", name),
+        os.path.join("/app/lib/hyprcrd", name),
+    ]:
+        if os.path.exists(candidate):
+            return candidate
+    return os.path.join(BIN_DIR, name)
+
+
+HOST_BINARY = _find_component("chrome-remote-desktop-host")
+PORTAL_BINARY = _find_component("hyprcrd-portal")
+PAM_SHIM = _find_component("pam_shim.so")
 DEFAULT_CONFIG_DIR = os.path.expanduser("~/.config/chrome-remote-desktop")
 
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [hyprCRD] [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
+
 
 class HyprCRDDaemon:
     def __init__(self, wayland_display=None, config_path=None, audio_pipe=None):
-        self.wayland_display = wayland_display or os.environ.get("WAYLAND_DISPLAY", "wayland-1")
+        self.wayland_display = wayland_display or os.environ.get(
+            "WAYLAND_DISPLAY", "wayland-1"
+        )
         self.config_path = config_path or self._find_host_config()
         self.audio_pipe = audio_pipe
         self.host_proc = None
@@ -60,9 +80,14 @@ class HyprCRDDaemon:
         # Check if portal is already running on session bus
         try:
             check = subprocess.run(
-                ["busctl", "--user", "status", "org.freedesktop.impl.portal.desktop.hypr-remote"],
+                [
+                    "busctl",
+                    "--user",
+                    "status",
+                    "org.freedesktop.impl.portal.desktop.hypr-remote",
+                ],
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
             )
             if check.returncode == 0:
                 logging.info("hyprcrd-portal is already active on D-Bus.")
@@ -70,7 +95,9 @@ class HyprCRDDaemon:
         except Exception:
             pass
 
-        logging.info(f"Starting hyprcrd-portal for Wayland display '{self.wayland_display}'...")
+        logging.info(
+            f"Starting hyprcrd-portal for Wayland display '{self.wayland_display}'..."
+        )
         portal_env = os.environ.copy()
         portal_env["WAYLAND_DISPLAY"] = self.wayland_display
         portal_env["XDG_CURRENT_DESKTOP"] = "Hyprland"
@@ -80,7 +107,7 @@ class HyprCRDDaemon:
             env=portal_env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True
+            text=True,
         )
 
         def log_portal():
@@ -112,7 +139,7 @@ class HyprCRDDaemon:
         host_env = os.environ.copy()
         current_ld_path = host_env.get("LD_LIBRARY_PATH", "")
         host_env["LD_LIBRARY_PATH"] = f"{BIN_DIR}:{current_ld_path}".rstrip(":")
-        
+
         # Inject PAM shim
         if os.path.exists(PAM_SHIM):
             current_preload = host_env.get("LD_PRELOAD", "")
@@ -125,16 +152,35 @@ class HyprCRDDaemon:
         host_env["CHROME_REMOTE_DESKTOP_SESSION"] = "1"
         host_env["CHROME_REMOTE_DESKTOP_USE_WAYLAND"] = "1"
 
+        # Fix: DMA-BUF import fails when EGL has no valid context.
+        # The host tries to import Hyprland's GPU DMA-BUF frames via EGL, but
+        # eglCreateImageKHR / glFramebufferImage2DOES fails ("EGL_BAD_DISPLAY"
+        # or "Failed to bind DMA buf framebuffer") because EGL was initialized
+        # without a render device context.
+        #
+        # Fix: use EGL_PLATFORM=device + point to the DRM render node so the
+        # host gets a proper headless EGL/GBM context capable of DMA-BUF import.
+        # renderD128 is world-readable (crw-rw-rw-), so no permission issues.
+        host_env["EGL_PLATFORM"] = "device"
+        if os.path.exists("/dev/dri/renderD128"):
+            host_env["EGL_DEVICE_DRM"] = "/dev/dri/renderD128"
+            logging.info(
+                "EGL: using DRM render node /dev/dri/renderD128 for DMA-BUF import"
+            )
+        else:
+            # No render node — force software EGL so the stream falls back
+            # gracefully to SHM instead of hanging on broken DMA-BUF.
+            host_env["LIBGL_ALWAYS_SOFTWARE"] = "1"
+            logging.warning(
+                "EGL: no /dev/dri/renderD128 found, forcing software EGL (SHM fallback)"
+            )
+
         args = [HOST_BINARY, "--host-config=-", "--signal-parent"]
         if self.audio_pipe:
             args.append(f"--audio-pipe-name={self.audio_pipe}")
 
         # Setup SIGUSR1 handler to catch readiness signal from host
-        def sigusr1_handler(signum, frame):
-            logging.info("🎉 Host received SIGUSR1: Ready to receive connections!")
-            self.host_ready = True
-
-        signal.signal(signal.SIGUSR1, sigusr1_handler)
+        signal.signal(signal.SIGUSR1, self._on_sigusr1)
 
         logging.info(f"Launching host binary: {HOST_BINARY}")
         self.host_proc = subprocess.Popen(
@@ -143,7 +189,7 @@ class HyprCRDDaemon:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True
+            text=True,
         )
 
         # Pipe config to stdin
@@ -176,6 +222,15 @@ class HyprCRDDaemon:
         finally:
             self.stop()
 
+    def _on_sigusr1(self, signum, frame):
+        logging.info("🎉 Host received SIGUSR1: Ready to receive connections!")
+        self.host_ready = True
+
+    def _on_shutdown(self, signum, frame):
+        logging.info(f"Received signal {signum}, initiating clean shutdown...")
+        self.stop()
+        sys.exit(0)
+
     def stop(self):
         self.running = False
         logging.info("Stopping hyprCRD host daemon...")
@@ -193,9 +248,14 @@ class HyprCRDDaemon:
                 self.portal_proc.kill()
         logging.info("hyprCRD host daemon stopped cleanly.")
 
+
 def main():
-    parser = argparse.ArgumentParser(description="hyprCRD - Native Chrome Remote Desktop for Hyprland")
-    parser.add_argument("--display", help="Target Wayland display (e.g. wayland-1 or wayland-2)")
+    parser = argparse.ArgumentParser(
+        description="hyprCRD - Native Chrome Remote Desktop for Hyprland"
+    )
+    parser.add_argument(
+        "--display", help="Target Wayland display (e.g. wayland-1 or wayland-2)"
+    )
     parser.add_argument("--config", help="Path to host config JSON")
     parser.add_argument("--audio-pipe", help="Path to PipeWire audio pipe")
     args = parser.parse_args()
@@ -203,17 +263,14 @@ def main():
     daemon = HyprCRDDaemon(
         wayland_display=args.display,
         config_path=args.config,
-        audio_pipe=args.audio_pipe
+        audio_pipe=args.audio_pipe,
     )
 
-    def handle_shutdown(signum, frame):
-        daemon.stop()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, handle_shutdown)
-    signal.signal(signal.SIGTERM, handle_shutdown)
+    signal.signal(signal.SIGINT, daemon._on_shutdown)
+    signal.signal(signal.SIGTERM, daemon._on_shutdown)
 
     daemon.run()
+
 
 if __name__ == "__main__":
     main()

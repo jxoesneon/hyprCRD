@@ -61,6 +61,9 @@ class HyprCRDDaemon:
         self.portal_proc = None
         self.running = False
         self.host_ready = False
+        self.active_clients = 0
+        self.keepalive_running = False
+        self.keepalive_thread = None
 
     def _find_host_config(self):
         configs = glob.glob(os.path.join(DEFAULT_CONFIG_DIR, "host#*.json"))
@@ -207,6 +210,10 @@ class HyprCRDDaemon:
                 line = line.strip()
                 if line:
                     logging.info(f"[host] {line}")
+                    if "Client connected:" in line:
+                        self._on_client_connected(line)
+                    elif "Client disconnected:" in line:
+                        self._on_client_disconnected(line)
 
         t_out = threading.Thread(target=stream_host_output, daemon=True)
         t_out.start()
@@ -224,6 +231,110 @@ class HyprCRDDaemon:
         finally:
             self.stop()
 
+    def _get_hypr_env(self):
+        env = os.environ.copy()
+        if "HYPRLAND_INSTANCE_SIGNATURE" not in env:
+            uid = os.getuid()
+            hypr_dir = f"/run/user/{uid}/hypr"
+            if os.path.isdir(hypr_dir):
+                socks = sorted(
+                    [s for s in os.listdir(hypr_dir) if not s.startswith(".")],
+                    key=lambda s: os.path.getmtime(os.path.join(hypr_dir, s)),
+                    reverse=True,
+                )
+                if socks:
+                    env["HYPRLAND_INSTANCE_SIGNATURE"] = socks[0]
+        return env
+
+    def _wake_display(self):
+        """Wakes up monitors from DPMS sleep and triggers an immediate frame render."""
+        env = self._get_hypr_env()
+        logging.info("Waking displays and activating DPMS for remote connection...")
+        try:
+            # 1. Dispatch DPMS on via both Lua syntax and legacy CLI syntax
+            subprocess.run(
+                ["hyprctl", "dispatch", 'hl.dsp.dpms("on")'],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+            )
+            subprocess.run(
+                ["hyprctl", "dispatch", "dpms", "on"],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+            )
+            # 2. Trigger an immediate damage event on Hyprland so PipeWire captures the lockscreen
+            subprocess.run(
+                ["hyprctl", "cursorpos"],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=1,
+            )
+        except Exception as e:
+            logging.warning(f"Failed to dispatch display wakeup: {e}")
+
+    def _start_display_keepalive(self):
+        if self.keepalive_running:
+            return
+        self.keepalive_running = True
+
+        def keepalive_loop():
+            while self.keepalive_running and self.running:
+                time.sleep(30)
+                if self.active_clients > 0:
+                    env = self._get_hypr_env()
+                    subprocess.run(
+                        ["hyprctl", "dispatch", 'hl.dsp.dpms("on")'],
+                        env=env,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=2,
+                    )
+
+        self.keepalive_thread = threading.Thread(target=keepalive_loop, daemon=True)
+        self.keepalive_thread.start()
+
+    def _stop_display_keepalive(self):
+        self.keepalive_running = False
+
+    def _check_restore_lid_sleep(self):
+        lid_files = glob.glob("/proc/acpi/button/lid/*/state")
+        for lid_file in lid_files:
+            try:
+                with open(lid_file, "r") as f:
+                    if "closed" in f.read().lower():
+                        logging.info("Lid is physically closed; restoring DPMS off.")
+                        env = self._get_hypr_env()
+                        subprocess.run(
+                            ["hyprctl", "dispatch", 'hl.dsp.dpms("off", "eDP-1")'],
+                            env=env,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=2,
+                        )
+                        break
+            except Exception:
+                pass
+
+    def _on_client_connected(self, line):
+        self.active_clients += 1
+        logging.info(
+            f"Remote client connected ({self.active_clients} active). Waking lockscreen..."
+        )
+        self._wake_display()
+        self._start_display_keepalive()
+
+    def _on_client_disconnected(self, line):
+        self.active_clients = max(0, self.active_clients - 1)
+        logging.info(f"Remote client disconnected ({self.active_clients} active).")
+        if self.active_clients == 0:
+            self._stop_display_keepalive()
+            self._check_restore_lid_sleep()
+
     def _on_sigusr1(self, signum, frame):
         logging.info("Host received SIGUSR1: ready for incoming connections.")
         self.host_ready = True
@@ -235,6 +346,7 @@ class HyprCRDDaemon:
 
     def stop(self):
         self.running = False
+        self._stop_display_keepalive()
         logging.info("Stopping hyprCRD host daemon...")
         if self.host_proc and self.host_proc.poll() is None:
             try:

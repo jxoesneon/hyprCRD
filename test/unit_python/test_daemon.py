@@ -246,6 +246,52 @@ class TestHyprCRDDaemon(unittest.TestCase):
         daemon.run()
         self.assertFalse(daemon.running)
 
+    @patch("subprocess.run")
+    def test_15_wake_display(self, mock_subproc):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        daemon._wake_display()
+        self.assertTrue(mock_subproc.called)
+        # Should have called hyprctl dispatch with dpms on
+        dispatched_cmds = [call.args[0] for call in mock_subproc.call_args_list]
+        self.assertTrue(
+            any("dpms" in cmd for cmd in dispatched_cmds),
+            "Expected dpms wakeup to be dispatched",
+        )
+
+    @patch.object(HyprCRDDaemon, "_wake_display")
+    @patch.object(HyprCRDDaemon, "_start_display_keepalive")
+    @patch.object(HyprCRDDaemon, "_stop_display_keepalive")
+    @patch.object(HyprCRDDaemon, "_check_restore_lid_sleep")
+    def test_16_client_connection_lifecycle(
+        self, mock_lid, mock_stop_ka, mock_start_ka, mock_wake
+    ):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        self.assertEqual(daemon.active_clients, 0)
+
+        # Connect client 1
+        daemon._on_client_connected("Client connected: test@example.com")
+        self.assertEqual(daemon.active_clients, 1)
+        mock_wake.assert_called_once()
+        mock_start_ka.assert_called_once()
+
+        # Disconnect client 1
+        daemon._on_client_disconnected("Client disconnected: test@example.com")
+        self.assertEqual(daemon.active_clients, 0)
+        mock_stop_ka.assert_called_once()
+        mock_lid.assert_called_once()
+
+    def test_17_get_hypr_env(self):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        with patch.dict(os.environ, {"HYPRLAND_INSTANCE_SIGNATURE": "sig123"}):
+            env = daemon._get_hypr_env()
+            self.assertEqual(env.get("HYPRLAND_INSTANCE_SIGNATURE"), "sig123")
+
 
 if __name__ == "__main__":
     unittest.main()

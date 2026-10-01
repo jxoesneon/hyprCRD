@@ -3,12 +3,21 @@
 # When Chrome Remote Desktop is active, automatically selects the primary monitor for unattended access.
 # Otherwise falls back to official hyprland-share-picker for other apps.
 
+# Ensure HYPRLAND_INSTANCE_SIGNATURE is resolved if run in a restricted systemd/portal environment
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ] && [ -d "/run/user/$UID/hypr" ]; then
+    HYPRLAND_INSTANCE_SIGNATURE=$(ls -t "/run/user/$UID/hypr" 2>/dev/null | grep -v '^\.' | head -n 1)
+    export HYPRLAND_INSTANCE_SIGNATURE
+fi
+
+# Ensure displays are awake if requested while locked or in DPMS sleep
+hyprctl dispatch 'hl.dsp.dpms("on")' >/dev/null 2>&1 || hyprctl dispatch dpms on >/dev/null 2>&1 || true
+
 MONITOR=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name // empty' 2>/dev/null || echo "eDP-1")
 [ -z "$MONITOR" ] && MONITOR="eDP-1"
 
-# If CRD is requesting screen capture or running, auto-select the primary display
+# If CRD is requesting screen capture or running, auto-select the primary display with restore token flag
 if pgrep -f "chrome-remote-desktop-host" >/dev/null 2>&1 || [ -f "/tmp/hyprcrd.pid" ]; then
-    echo "[SELECTION]/screen:${MONITOR}"
+    echo "[SELECTION]r/screen:${MONITOR}"
     exit 0
 fi
 
@@ -16,6 +25,7 @@ fi
 if [ -x "/usr/bin/hyprland-share-picker" ]; then
     exec /usr/bin/hyprland-share-picker "$@"
 else
-    echo "[SELECTION]/screen:${MONITOR}"
+    echo "[SELECTION]r/screen:${MONITOR}"
     exit 0
 fi
+

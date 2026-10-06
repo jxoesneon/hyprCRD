@@ -9,6 +9,7 @@
 typedef struct pam_handle pam_handle_t;
 struct pam_conv;
 #define PAM_SUCCESS 0
+#define PAM_SYSTEM_ERR 4
 #endif
 #include <stdio.h>
 #include <string.h>
@@ -17,11 +18,26 @@ struct pam_conv;
 static pam_handle_t* crd_handles[16];
 static int n_handles;
 
+/* The shim does not link against libpam; resolve pam symbols via RTLD_NEXT
+ * (when the loading binary already uses libpam, e.g. chrome-remote-desktop-host)
+ * or fall back to dlopen so the shim also works when dlopen'ed standalone. */
+static void* pam_sym(const char* name) {
+    void* sym = dlsym(RTLD_NEXT, name);
+    if (sym)
+        return sym;
+    static void* pam_lib = NULL;
+    if (!pam_lib)
+        pam_lib = dlopen("libpam.so.0", RTLD_LAZY | RTLD_GLOBAL);
+    return pam_lib ? dlsym(pam_lib, name) : NULL;
+}
+
 int pam_start(const char* service, const char* user, const struct pam_conv* conv,
               pam_handle_t** handle) {
     static int (*real)(const char*, const char*, const struct pam_conv*, pam_handle_t**);
     if (!real)
-        real = dlsym(RTLD_NEXT, "pam_start");
+        real = pam_sym("pam_start");
+    if (!real)
+        return PAM_SYSTEM_ERR;
     int r = real(service, user, conv, handle);
     if (r == PAM_SUCCESS && service && strcmp(service, "chrome-remote-desktop") == 0 &&
         n_handles < 16)
@@ -32,17 +48,21 @@ int pam_start(const char* service, const char* user, const struct pam_conv* conv
 int pam_acct_mgmt(pam_handle_t* handle, int flags) {
     static int (*real)(pam_handle_t*, int);
     if (!real)
-        real = dlsym(RTLD_NEXT, "pam_acct_mgmt");
+        real = pam_sym("pam_acct_mgmt");
     for (int i = 0; i < n_handles; i++)
         if (crd_handles[i] == handle)
             return PAM_SUCCESS;
+    if (!real)
+        return PAM_SYSTEM_ERR;
     return real(handle, flags);
 }
 
 int pam_end(pam_handle_t* handle, int status) {
     static int (*real)(pam_handle_t*, int);
     if (!real)
-        real = dlsym(RTLD_NEXT, "pam_end");
+        real = pam_sym("pam_end");
+    if (!real)
+        return PAM_SYSTEM_ERR;
     for (int i = 0; i < n_handles; i++)
         if (crd_handles[i] == handle) {
             crd_handles[i] = crd_handles[--n_handles];

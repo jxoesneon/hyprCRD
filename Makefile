@@ -31,7 +31,7 @@ lint:
 	@echo "Checking C/C++ formatting (clang-format)..."
 	@clang-format --dry-run --Werror core/pam_shim.c portal/src/*.cpp portal/src/*.h portal/test_virtual_input.cpp
 	@echo "Checking shell scripts (shellcheck)..."
-	@uv tool run --from shellcheck-py shellcheck scripts/*.sh test/*.sh bin/hyprcrd-enroll
+	@uv tool run --from shellcheck-py shellcheck scripts/*.sh test/*.sh bin/hyprcrd-enroll bin/hyprcrd-picker
 	@echo "Checking security and AST safety (bandit)..."
 	@uv tool run bandit -r bin/hyprcrd core/daemon.py -s B108,B110,B404,B603,B607
 	@echo "Checking repository hygiene (binaries and secrets)..."

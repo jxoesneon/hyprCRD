@@ -3,29 +3,57 @@
 # When Chrome Remote Desktop is active, automatically selects the primary monitor for unattended access.
 # Otherwise falls back to official hyprland-share-picker for other apps.
 
-# Ensure HYPRLAND_INSTANCE_SIGNATURE is resolved if run in a restricted systemd/portal environment
+# Auto-approval is only allowed for screencasts initiated by hyprcrd-portal.
+# The portal writes a short-lived handshake marker before delegating source
+# selection to xdg-desktop-portal-hyprland.
+MARKER="${XDG_RUNTIME_DIR:-}/hyprcrd/select-pending"
+SHARE_PICKER="${HYPRCRD_SHARE_PICKER:-/usr/bin/hyprland-share-picker}"
+
+_hypr_instance_alive() {
+    local lock="/run/user/$UID/hypr/$1/hyprland.lock"
+    [ -f "$lock" ] || return 1
+    local pid
+    pid="$(head -n 1 "$lock" 2>/dev/null)"
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+# Keep a preset HYPRLAND_INSTANCE_SIGNATURE only if its instance is still alive;
+# otherwise resolve the newest live instance (dead dirs from past sessions are common).
+if [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ] && ! _hypr_instance_alive "$HYPRLAND_INSTANCE_SIGNATURE"; then
+    unset HYPRLAND_INSTANCE_SIGNATURE
+fi
 if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ] && [ -d "/run/user/$UID/hypr" ]; then
-    HYPRLAND_INSTANCE_SIGNATURE=$(ls -t "/run/user/$UID/hypr" 2>/dev/null | grep -v '^\.' | head -n 1)
-    export HYPRLAND_INSTANCE_SIGNATURE
+    while IFS= read -r dir; do
+        case "$dir" in .*) continue ;; esac
+        if _hypr_instance_alive "$dir"; then
+            HYPRLAND_INSTANCE_SIGNATURE="$dir"
+            export HYPRLAND_INSTANCE_SIGNATURE
+            break
+        fi
+    done < <(ls -t "/run/user/$UID/hypr" 2>/dev/null)
 fi
 
-# Ensure displays are awake if requested while locked or in DPMS sleep
-hyprctl dispatch 'hl.dsp.dpms("on")' >/dev/null 2>&1 || hyprctl dispatch dpms on >/dev/null 2>&1 || true
+marker_valid=false
+if [ -n "$XDG_RUNTIME_DIR" ] && [ -f "$MARKER" ] && [ -O "$MARKER" ]; then
+    marker_mtime="$(stat -c %Y "$MARKER" 2>/dev/null || echo 0)"
+    now="$(date +%s)"
+    [ "$((now - marker_mtime))" -lt 30 ] && marker_valid=true
+fi
 
-MONITOR=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name // empty' 2>/dev/null || echo "eDP-1")
-[ -z "$MONITOR" ] && MONITOR="eDP-1"
-
-# If CRD is requesting screen capture or running, auto-select the primary display with restore token flag
-if pgrep -f "chrome-remote-desktop-host" >/dev/null 2>&1 || [ -f "/tmp/hyprcrd.pid" ]; then
+if [ "$marker_valid" = true ]; then
+    # Consume the marker so it cannot be reused by another requester.
+    rm -f "$MARKER"
+    MONITOR=$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].name // empty' 2>/dev/null || echo "eDP-1")
+    [ -z "$MONITOR" ] && MONITOR="eDP-1"
     echo "[SELECTION]r/screen:${MONITOR}"
     exit 0
 fi
 
-# Otherwise delegate to standard picker
-if [ -x "/usr/bin/hyprland-share-picker" ]; then
-    exec /usr/bin/hyprland-share-picker "$@"
-else
-    echo "[SELECTION]r/screen:${MONITOR}"
-    exit 0
+# Otherwise delegate to the standard picker for interactive selection.
+if [ -x "$SHARE_PICKER" ]; then
+    exec "$SHARE_PICKER" "$@"
 fi
 
+# Fail closed: without a valid marker or a picker there is nothing selectable.
+echo "hyprcrd-picker: no valid CRD selection marker; refusing automatic selection" >&2
+exit 1

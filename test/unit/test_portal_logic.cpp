@@ -3,9 +3,14 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 
 #include "../../portal/src/wayland_virtual_pointer.h"
 #include "../../portal/src/wayland_virtual_keyboard.h"
+#include "../../portal/src/select_marker.h"
 
 extern "C" {
 #include <linux/input.h>
@@ -204,6 +209,49 @@ static void test_wayland_virtual_keyboard_methods() {
     std::cout << "  ✓ WaylandVirtualKeyboard safety assertions passed." << std::endl;
 }
 
+static void test_select_marker_helpers() {
+    std::cout << "[TEST] Testing screencast select-pending marker helpers..." << std::endl;
+
+    namespace fs = std::filesystem;
+    char tmpl[] = "/tmp/hyprcrd-marker-test-XXXXXX";
+    char* dir = mkdtemp(tmpl);
+    assert(dir != nullptr);
+    const fs::path marker = fs::path(dir) / "hyprcrd" / "select-pending";
+
+    // XDG_RUNTIME_DIR unset -> helpers are safe no-ops
+    unsetenv("XDG_RUNTIME_DIR");
+    writeSelectMarker("/session/unset");
+    clearSelectMarker();
+    assert(!fs::exists(marker));
+
+    setenv("XDG_RUNTIME_DIR", dir, 1);
+
+    // write creates the marker dir (0700) and file (0600) with the session handle
+    const std::string session = "/org/freedesktop/portal/desktop/session/1_42/test";
+    writeSelectMarker(session);
+    assert(fs::exists(marker));
+    assert((fs::status(marker.parent_path()).permissions() & fs::perms::mask) ==
+           fs::perms::owner_all);
+    assert((fs::status(marker).permissions() & fs::perms::mask) ==
+           (fs::perms::owner_read | fs::perms::owner_write));
+
+    std::ifstream in(marker);
+    const std::string content((std::istreambuf_iterator<char>(in)),
+                              std::istreambuf_iterator<char>());
+    assert(content == session);
+
+    // clear removes the marker and is safe to call twice
+    clearSelectMarker();
+    assert(!fs::exists(marker));
+    clearSelectMarker();
+    assert(!fs::exists(marker));
+
+    fs::remove_all(dir);
+    unsetenv("XDG_RUNTIME_DIR");
+
+    std::cout << "  ✓ Select marker helpers passed with 100% assertions." << std::endl;
+}
+
 int main() {
     std::cout << "====================================================" << std::endl;
     std::cout << "  Running Portal Core & Virtual Input Unit Tests   " << std::endl;
@@ -213,6 +261,7 @@ int main() {
     test_modifier_state_tracker();
     test_wayland_virtual_pointer_methods();
     test_wayland_virtual_keyboard_methods();
+    test_select_marker_helpers();
 
     std::cout << "\n✓ ALL PORTAL LOGIC TESTS PASSED (100% Success)!" << std::endl;
     return 0;

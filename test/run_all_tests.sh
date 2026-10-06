@@ -47,6 +47,7 @@ g++ -std=c++20 -o "$BASE_DIR/test/unit/run_test_portal_logic" \
     "$BASE_DIR/test/unit/test_portal_logic.cpp" \
     "$BASE_DIR/portal/src/wayland_virtual_pointer.cpp" \
     "$BASE_DIR/portal/src/wayland_virtual_keyboard.cpp" \
+    "$BASE_DIR/portal/src/select_marker.cpp" \
     "$BASE_DIR/portal/build/libwayland_protocols.a" \
     -I"$BASE_DIR/portal/build/generated" \
     $(pkg-config --cflags --libs wayland-client xkbcommon) -lpthread

@@ -126,6 +126,7 @@ add_executable(xdg-desktop-portal-hypr-remote
     src/main.cpp
     src/portal.cpp
     src/libei_handler.cpp
+    src/select_marker.cpp
     src/wayland_virtual_keyboard.cpp
     src/wayland_virtual_pointer.cpp
 )

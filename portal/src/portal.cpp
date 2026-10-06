@@ -16,6 +16,7 @@
 #include <thread>
 
 #include "libei_handler.h"
+#include "select_marker.h"
 #include "wayland_virtual_keyboard.h"
 #include "wayland_virtual_pointer.h"
 
@@ -216,6 +217,7 @@ std::tuple<uint32_t, std::map<std::string, sdbus::Variant>> Portal::CreateSessio
                             "org.freedesktop.impl.portal.Session");
                     } catch (...) {
                     }
+                    clearSelectMarker();
                     session_objects.erase(session_handle);
                 }),
                 sdbus::registerProperty("version").withGetter([]() -> uint32_t { return 1; }))
@@ -226,6 +228,9 @@ std::tuple<uint32_t, std::map<std::string, sdbus::Variant>> Portal::CreateSessio
         std::cerr << "Warning: Could not export session object at " << session_handle << ": "
                   << e.what() << std::endl;
     }
+
+    // Signal hyprcrd-picker that the upcoming screencast source selection is ours
+    writeSelectMarker(std::string(session_handle));
 
     // Also register paired session in xdg-desktop-portal-hyprland so SelectSources succeeds
     try {
@@ -280,6 +285,7 @@ std::tuple<uint32_t, std::map<std::string, sdbus::Variant>> Portal::Start(
             .onInterface("org.freedesktop.impl.portal.ScreenCast")
             .withArguments(request_handle, session_handle, app_id, parent_window, options)
             .storeResultsTo(resp_code, sc_results);
+        clearSelectMarker();
 
         std::cout << "Hyprland ScreenCast.Start returned code: " << resp_code << std::endl;
         if (sc_results.find("streams") != sc_results.end()) {
@@ -291,6 +297,7 @@ std::tuple<uint32_t, std::map<std::string, sdbus::Variant>> Portal::Start(
             return {resp_code, response};
         }
     } catch (const std::exception& e) {
+        clearSelectMarker();
         std::cerr << "Warning: ScreenCast.Start on hyprland failed: " << e.what() << std::endl;
     }
 

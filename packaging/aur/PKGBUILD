@@ -31,11 +31,11 @@ conflicts=('hyprcrd')
 install=hyprcrd.install
 source=(
     "git+https://github.com/jxoesneon/hyprCRD.git"
-    "https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb"
+    "https://dl.google.com/linux/chrome-remote-desktop/deb/pool/main/c/chrome-remote-desktop/chrome-remote-desktop_155.0.8059.19_amd64.deb"
 )
 sha256sums=(
     'SKIP'
-    'SKIP'
+    '39701c6951b3d9edff08143dccad919468e1866b9897c873141dc4f66baaff72'
 )
 
 pkgver() {
@@ -46,7 +46,7 @@ pkgver() {
 prepare() {
     cd "${srcdir}"
     # Unpack official Google Chrome Remote Desktop debian package
-    bsdtar -xf chrome-remote-desktop_current_amd64.deb data.tar.xz
+    bsdtar -xf chrome-remote-desktop_155.0.8059.19_amd64.deb data.tar.xz
     mkdir -p crd-deb-data
     bsdtar -xf data.tar.xz -C crd-deb-data
 }

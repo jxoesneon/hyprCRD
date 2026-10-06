@@ -3,6 +3,10 @@
 # fetch_google_binaries.sh
 # Downloads and extracts official Google Chrome Remote Desktop debian package
 # to populate bin/ with proprietary Google components for local development.
+#
+# Usage:
+#   fetch_google_binaries.sh               download + verify + install pinned CRD
+#   fetch_google_binaries.sh --check-update  compare pinned vs upstream latest
 # ==============================================================================
 
 set -eo pipefail
@@ -10,23 +14,47 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BIN_DIR="$BASE_DIR/bin"
-GOOGLE_DEB_URL="https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb"
-EXPECTED_SHA256="572dee08ca024f922a4c35b4b028abda348c9b54f12888eaaae53f6870dd5924"
+CRD_VERSION="155.0.8059.19"
+GOOGLE_DEB_URL="https://dl.google.com/linux/chrome-remote-desktop/deb/pool/main/c/chrome-remote-desktop/chrome-remote-desktop_${CRD_VERSION}_amd64.deb"
+EXPECTED_SHA256="39701c6951b3d9edff08143dccad919468e1866b9897c873141dc4f66baaff72"
+APT_PACKAGES_URL="https://dl.google.com/linux/chrome-remote-desktop/deb/dists/stable/main/binary-amd64/Packages"
+
+if [ "${1:-}" = "--check-update" ]; then
+    echo "▶ Checking upstream chrome-remote-desktop versions..."
+    LATEST_VERSION=$(curl -fsSL "$APT_PACKAGES_URL" | awk '
+        /^Package: chrome-remote-desktop$/ { in_pkg = 1; next }
+        /^Package: / { in_pkg = 0 }
+        in_pkg && /^Version: / { print $2 }
+    ' | sort -V | tail -n 1)
+    if [ -z "$LATEST_VERSION" ]; then
+        echo "Error: could not determine upstream version." >&2
+        exit 1
+    fi
+    echo "Pinned: $CRD_VERSION"
+    echo "Latest: $LATEST_VERSION"
+    if [ "$LATEST_VERSION" = "$CRD_VERSION" ]; then
+        echo "hyprCRD is pinned to the latest upstream release."
+        exit 0
+    fi
+    echo "A newer upstream release is available."
+    exit 2
+fi
 
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
-echo "▶ Fetching Google Chrome Remote Desktop package..."
+echo "▶ Fetching Google Chrome Remote Desktop $CRD_VERSION..."
 curl -fsSL -o "$TEMP_DIR/crd.deb" "$GOOGLE_DEB_URL"
 
 echo "▶ Verifying SHA256 checksum..."
 ACTUAL_SHA256=$(sha256sum "$TEMP_DIR/crd.deb" | awk '{print $1}')
 if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
-    echo "Notice: Upstream checksum mismatch (expected: $EXPECTED_SHA256, actual: $ACTUAL_SHA256)"
-    echo "Proceeding with downloaded archive..."
-else
-    echo "Checksum verified."
+    echo "Error: checksum mismatch for chrome-remote-desktop_${CRD_VERSION}_amd64.deb" >&2
+    echo "  expected: $EXPECTED_SHA256" >&2
+    echo "  actual:   $ACTUAL_SHA256" >&2
+    exit 1
 fi
+echo "Checksum verified."
 
 echo "▶ Extracting Debian payload..."
 bsdtar -xf "$TEMP_DIR/crd.deb" -C "$TEMP_DIR" data.tar.xz

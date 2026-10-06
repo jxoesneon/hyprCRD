@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Local display blanked at login**: `hl.dsp.dpms("on")` takes its action from a table under Hyprland's Lua config, so the string form was treated as a toggle and turned an active display off whenever the picker or daemon tried to wake it. DPMS is now dispatched with explicit `{ action = "on" | "off" }` tables (legacy `dpms <action>` fallback for hyprlang configs), and the picker no longer touches DPMS at all.
+- **Stale Hyprland instance selection**: the daemon and picker now resolve the instance whose `hyprland.lock` PID is alive instead of the newest directory in `$XDG_RUNTIME_DIR/hypr`.
+- **`pam_shim.so` crash when loaded standalone**: PAM symbols fall back to `dlopen("libpam.so.0")` when not resolvable via `RTLD_NEXT`.
+
+### Security
+- **Screencast auto-approval restricted to hyprCRD**: `hyprcrd-picker` previously auto-shared the primary monitor with any requesting application while the CRD host ran (or whenever `/tmp/hyprcrd.pid` existed). `hyprcrd-portal` now writes a short-lived, owner-only handshake marker (`$XDG_RUNTIME_DIR/hyprcrd/select-pending`) and the picker auto-selects only when it is fresh, consuming it on use; all other requests go to the standard picker, and the picker fails closed if none is installed.
+- **Runtime files moved out of `/tmp`**: PID file now lives in `$XDG_RUNTIME_DIR/hyprcrd/`, logs in `$XDG_STATE_HOME/hyprcrd/` (both `0700`).
+- **Verified upstream download**: `scripts/fetch_google_binaries.sh` pins a versioned package URL and aborts on SHA-256 mismatch; `--check-update` reports newer upstream releases.
+
+### Changed
+- Google Chrome Remote Desktop host bumped to **155.0.8059.19** (script, AUR `PKGBUILD`/`.SRCINFO`, Flatpak manifest).
+
 ## [1.0.0-rc.1] - 2026-09-23
 
 ### Added

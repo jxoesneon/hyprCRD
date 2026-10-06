@@ -21,7 +21,20 @@ BIN_DIR = BASE_DIR / "bin"
 CORE_DIR = BASE_DIR / "core"
 TEST_DIR = BASE_DIR / "test"
 CONFIG_DIR = Path.home() / ".config" / "chrome-remote-desktop"
-PID_FILE = Path("/tmp/hyprcrd.pid")
+
+
+def runtime_dir() -> Path:
+    base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return Path(base) / "hyprcrd"
+
+
+def state_dir() -> Path:
+    base = os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state"))
+    return Path(base) / "hyprcrd"
+
+
+PID_FILE = runtime_dir() / "hyprcrd.pid"
+LOG_FILE = state_dir() / "hyprcrd.log"
 
 # Terminal colors
 CYAN = "\033[0;36m"
@@ -181,7 +194,9 @@ def cmd_start(args):
         subprocess.run(cmd)
     else:
         print(f"{GREEN}Starting hyprCRD daemon on {display}...{NC}")
-        log_file = open("/tmp/hyprcrd.log", "a", buffering=1)
+        PID_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        LOG_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        log_file = open(LOG_FILE, "a", buffering=1)
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         proc = subprocess.Popen(
@@ -192,7 +207,7 @@ def cmd_start(args):
             start_new_session=True,
         )
         PID_FILE.write_text(str(proc.pid))
-        print(f"hyprCRD started (PID: {proc.pid}). Logs at /tmp/hyprcrd.log")
+        print(f"hyprCRD started (PID: {proc.pid}). Logs at {LOG_FILE}")
 
 
 def cmd_stop(args):

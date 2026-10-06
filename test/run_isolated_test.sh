@@ -60,7 +60,7 @@ if ! command -v Hyprland >/dev/null 2>&1; then
 fi
 
 rm -f "$RUNTIME_DIR/$TARGET_SOCKET" "$RUNTIME_DIR/$TARGET_SOCKET.lock"
-WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 Hyprland -c "$CONF_PATH" >/tmp/hyprcrd-isolated-hypr.log 2>&1 &
+WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1 Hyprland -c "$CONF_PATH" >"$RUNTIME_DIR/hyprcrd-isolated-hypr.log" 2>&1 &
 HYPR_PID=$!
 
 # Wait for isolated socket (wayland-2)
@@ -70,7 +70,7 @@ while [ ! -S "$RUNTIME_DIR/$TARGET_SOCKET" ]; do
     WAITED=$((WAITED + 1))
     if [ $WAITED -ge 25 ]; then
         echo -e "  ${RED}✗ Timed out waiting for $RUNTIME_DIR/$TARGET_SOCKET to initialize.${NC}"
-        tail -n 20 /tmp/hyprcrd-isolated-hypr.log
+        tail -n 20 "$RUNTIME_DIR/hyprcrd-isolated-hypr.log"
         exit 1
     fi
 done
@@ -88,7 +88,7 @@ echo -e "\n${BLUE}[4/5] Testing hyprcrd-portal bridge initialization...${NC}"
 if busctl --user status org.freedesktop.impl.portal.desktop.hypr-remote >/dev/null 2>&1; then
     echo -e "  ${GREEN}✓ hyprcrd-portal is active and registered on D-Bus ('org.freedesktop.impl.portal.desktop.hypr-remote').${NC}"
 else
-    "$BIN_DIR/hyprcrd-portal" >/tmp/hyprcrd-isolated-portal.log 2>&1 &
+    "$BIN_DIR/hyprcrd-portal" >"$RUNTIME_DIR/hyprcrd-isolated-portal.log" 2>&1 &
     PORTAL_PID=$!
     sleep 1.5
 
@@ -102,7 +102,7 @@ else
         PORTAL_PID=""
     else
         echo -e "  ${RED}✗ hyprcrd-portal failed to stay active.${NC}"
-        tail -n 20 /tmp/hyprcrd-isolated-portal.log
+        tail -n 20 "$RUNTIME_DIR/hyprcrd-isolated-portal.log"
         exit 1
     fi
 fi

@@ -243,6 +243,28 @@ class TestHyprCRDCLI(unittest.TestCase):
                 hyprcrd_cli.main()
             self.assertEqual(cm.exception.code, 0)
 
+    def test_19_runtime_and_state_dirs(self):
+        with patch.dict(
+            os.environ,
+            {"XDG_RUNTIME_DIR": "/run/test-rt", "XDG_STATE_HOME": "/state-x"},
+        ):
+            self.assertEqual(hyprcrd_cli.runtime_dir(), Path("/run/test-rt/hyprcrd"))
+            self.assertEqual(hyprcrd_cli.state_dir(), Path("/state-x/hyprcrd"))
+        # Without XDG vars, fall back to per-user locations — never world-writable /tmp
+        with patch.dict(os.environ):
+            os.environ.pop("XDG_RUNTIME_DIR", None)
+            os.environ.pop("XDG_STATE_HOME", None)
+            self.assertEqual(
+                hyprcrd_cli.runtime_dir(),
+                Path(f"/run/user/{os.getuid()}/hyprcrd"),
+            )
+            self.assertEqual(
+                hyprcrd_cli.state_dir(),
+                Path.home() / ".local" / "state" / "hyprcrd",
+            )
+            self.assertNotIn("/tmp", str(hyprcrd_cli.runtime_dir()))
+            self.assertNotIn("/tmp", str(hyprcrd_cli.state_dir()))
+
 
 if __name__ == "__main__":
     unittest.main()

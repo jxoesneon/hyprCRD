@@ -16,6 +16,7 @@ import logging
 import argparse
 import subprocess
 import threading
+from typing import Optional
 
 __version__ = "1.0.0-rc.1"
 
@@ -233,39 +234,77 @@ class HyprCRDDaemon:
 
     def _get_hypr_env(self):
         env = os.environ.copy()
-        if "HYPRLAND_INSTANCE_SIGNATURE" not in env:
-            uid = os.getuid()
-            hypr_dir = f"/run/user/{uid}/hypr"
-            if os.path.isdir(hypr_dir):
-                socks = sorted(
-                    [s for s in os.listdir(hypr_dir) if not s.startswith(".")],
-                    key=lambda s: os.path.getmtime(os.path.join(hypr_dir, s)),
-                    reverse=True,
-                )
-                if socks:
-                    env["HYPRLAND_INSTANCE_SIGNATURE"] = socks[0]
+        uid = os.getuid()
+        hypr_dir = f"/run/user/{uid}/hypr"
+
+        def instance_alive(name):
+            lock_path = os.path.join(hypr_dir, name, "hyprland.lock")
+            try:
+                with open(lock_path, "r") as f:
+                    pid = int(f.readline().strip())
+                os.kill(pid, 0)
+                return True
+            except PermissionError:
+                return True
+            except (OSError, ValueError):
+                return False
+
+        sig = env.get("HYPRLAND_INSTANCE_SIGNATURE")
+        if sig:
+            if instance_alive(sig):
+                return env
+            env.pop("HYPRLAND_INSTANCE_SIGNATURE")
+        if os.path.isdir(hypr_dir):
+            socks = sorted(
+                [s for s in os.listdir(hypr_dir) if not s.startswith(".")],
+                key=lambda s: os.path.getmtime(os.path.join(hypr_dir, s)),
+                reverse=True,
+            )
+            for sock in socks:
+                if instance_alive(sock):
+                    env["HYPRLAND_INSTANCE_SIGNATURE"] = sock
+                    break
         return env
+
+    def _dispatch_dpms(self, action: str, monitor: Optional[str] = None) -> None:
+        """Dispatches a DPMS action via the Lua dispatcher, falling back to the
+        legacy CLI dispatcher for hyprlang (.conf) configs."""
+        env = self._get_hypr_env()
+        if monitor:
+            lua_expr = f'hl.dsp.dpms({{ action = "{action}", monitor = "{monitor}" }})'
+        else:
+            lua_expr = f'hl.dsp.dpms({{ action = "{action}" }})'
+        try:
+            result = subprocess.run(
+                ["hyprctl", "dispatch", lua_expr],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=2,
+            )
+            if result.stdout.strip() == "ok":
+                return
+            legacy_cmd = ["hyprctl", "dispatch", "dpms", action]
+            if monitor:
+                legacy_cmd.append(monitor)
+            subprocess.run(
+                legacy_cmd,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+            )
+        except Exception as e:
+            logging.warning(f"Failed to dispatch DPMS {action}: {e}")
 
     def _wake_display(self):
         """Wakes up monitors from DPMS sleep and triggers an immediate frame render."""
         env = self._get_hypr_env()
         logging.info("Waking displays and activating DPMS for remote connection...")
         try:
-            # 1. Dispatch DPMS on via both Lua syntax and legacy CLI syntax
-            subprocess.run(
-                ["hyprctl", "dispatch", 'hl.dsp.dpms("on")'],
-                env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=2,
-            )
-            subprocess.run(
-                ["hyprctl", "dispatch", "dpms", "on"],
-                env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=2,
-            )
+            # 1. Dispatch DPMS on via the Lua dispatcher (legacy CLI fallback)
+            self._dispatch_dpms("on")
             # 2. Trigger an immediate damage event on Hyprland so PipeWire captures the lockscreen
             subprocess.run(
                 ["hyprctl", "cursorpos"],
@@ -286,14 +325,7 @@ class HyprCRDDaemon:
             while self.keepalive_running and self.running:
                 time.sleep(30)
                 if self.active_clients > 0:
-                    env = self._get_hypr_env()
-                    subprocess.run(
-                        ["hyprctl", "dispatch", 'hl.dsp.dpms("on")'],
-                        env=env,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=2,
-                    )
+                    self._dispatch_dpms("on")
 
         self.keepalive_thread = threading.Thread(target=keepalive_loop, daemon=True)
         self.keepalive_thread.start()
@@ -308,14 +340,7 @@ class HyprCRDDaemon:
                 with open(lid_file, "r") as f:
                     if "closed" in f.read().lower():
                         logging.info("Lid is physically closed; restoring DPMS off.")
-                        env = self._get_hypr_env()
-                        subprocess.run(
-                            ["hyprctl", "dispatch", 'hl.dsp.dpms("off", "eDP-1")'],
-                            env=env,
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            timeout=2,
-                        )
+                        self._dispatch_dpms("off", "eDP-1")
                         break
             except Exception:
                 pass

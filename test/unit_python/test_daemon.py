@@ -6,12 +6,15 @@ and argument parsing for HyprCRDDaemon.
 """
 
 import os
+import re
 import sys
 import json
 import signal
 import tempfile
 import unittest
-from unittest.mock import patch, MagicMock
+import subprocess
+from contextlib import contextmanager
+from unittest.mock import patch, MagicMock, mock_open
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.insert(0, BASE_DIR)
@@ -253,11 +256,17 @@ class TestHyprCRDDaemon(unittest.TestCase):
         )
         daemon._wake_display()
         self.assertTrue(mock_subproc.called)
-        # Should have called hyprctl dispatch with dpms on
         dispatched_cmds = [call.args[0] for call in mock_subproc.call_args_list]
-        self.assertTrue(
-            any("dpms" in cmd for cmd in dispatched_cmds),
-            "Expected dpms wakeup to be dispatched",
+        # DPMS on must be dispatched via the Lua table form
+        self.assertIn(
+            ["hyprctl", "dispatch", 'hl.dsp.dpms({ action = "on" })'],
+            dispatched_cmds,
+        )
+        # The string form hl.dsp.dpms("...") is silently ignored by Lua configs
+        flat_args = [arg for cmd in dispatched_cmds for arg in cmd]
+        self.assertFalse(
+            any('hl.dsp.dpms("' in arg for arg in flat_args),
+            "String-form hl.dsp.dpms dispatch must never be used",
         )
 
     @patch.object(HyprCRDDaemon, "_wake_display")
@@ -284,13 +293,224 @@ class TestHyprCRDDaemon(unittest.TestCase):
         mock_stop_ka.assert_called_once()
         mock_lid.assert_called_once()
 
+    @contextmanager
+    def _hypr_instances(self, instances, alive_pids=(), foreign_pids=()):
+        """Mocks a /run/user/<uid>/hypr tree.
+
+        instances: {name: (pid, mtime)}; alive_pids respond to os.kill(pid, 0);
+        foreign_pids raise PermissionError (alive but owned by another user);
+        any other pid raises ProcessLookupError.
+        """
+
+        def fake_open(path, *args, **kwargs):
+            name = os.path.basename(os.path.dirname(path))
+            if name in instances and os.path.basename(path) == "hyprland.lock":
+                return mock_open(read_data=f"{instances[name][0]}\n")()
+            raise FileNotFoundError(path)
+
+        def fake_kill(pid, sig):
+            if pid in alive_pids:
+                return
+            if pid in foreign_pids:
+                raise PermissionError(pid)
+            raise ProcessLookupError(pid)
+
+        with patch("os.path.isdir", return_value=True), patch(
+            "os.listdir", return_value=list(instances)
+        ), patch(
+            "os.path.getmtime",
+            side_effect=lambda p: instances[os.path.basename(p)][1],
+        ), patch(
+            "builtins.open", side_effect=fake_open
+        ), patch(
+            "os.kill", side_effect=fake_kill
+        ):
+            yield
+
     def test_17_get_hypr_env(self):
         daemon = HyprCRDDaemon(
             wayland_display="wayland-1", config_path=self.sample_config_path
         )
-        with patch.dict(os.environ, {"HYPRLAND_INSTANCE_SIGNATURE": "sig123"}):
-            env = daemon._get_hypr_env()
-            self.assertEqual(env.get("HYPRLAND_INSTANCE_SIGNATURE"), "sig123")
+        with self._hypr_instances({"sig123": (4242, 100)}, alive_pids={4242}):
+            with patch.dict(os.environ, {"HYPRLAND_INSTANCE_SIGNATURE": "sig123"}):
+                env = daemon._get_hypr_env()
+        self.assertEqual(env.get("HYPRLAND_INSTANCE_SIGNATURE"), "sig123")
+
+    def test_29_get_hypr_env_picks_live_over_dead_newest(self):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        instances = {
+            "sig-dead": (2222, 200),  # newest dir but dead instance
+            "sig-live": (1111, 100),
+        }
+        with self._hypr_instances(instances, alive_pids={1111}):
+            with patch.dict(os.environ):
+                os.environ.pop("HYPRLAND_INSTANCE_SIGNATURE", None)
+                env = daemon._get_hypr_env()
+        self.assertEqual(env.get("HYPRLAND_INSTANCE_SIGNATURE"), "sig-live")
+
+    def test_30_get_hypr_env_dead_preset_replaced(self):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        instances = {
+            "sig-dead": (2222, 200),
+            "sig-live": (1111, 100),
+        }
+        with self._hypr_instances(instances, alive_pids={1111}):
+            with patch.dict(os.environ, {"HYPRLAND_INSTANCE_SIGNATURE": "sig-dead"}):
+                env = daemon._get_hypr_env()
+        self.assertEqual(env.get("HYPRLAND_INSTANCE_SIGNATURE"), "sig-live")
+
+    def test_31_get_hypr_env_none_alive(self):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        with self._hypr_instances({"sig-dead": (2222, 200)}):
+            with patch.dict(os.environ, {"HYPRLAND_INSTANCE_SIGNATURE": "sig-dead"}):
+                env = daemon._get_hypr_env()
+        self.assertNotIn("HYPRLAND_INSTANCE_SIGNATURE", env)
+
+    def test_32_get_hypr_env_permission_counts_alive(self):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        with self._hypr_instances({"sig123": (4242, 100)}, foreign_pids={4242}):
+            with patch.dict(os.environ, {"HYPRLAND_INSTANCE_SIGNATURE": "sig123"}):
+                env = daemon._get_hypr_env()
+        self.assertEqual(env.get("HYPRLAND_INSTANCE_SIGNATURE"), "sig123")
+
+    @patch("subprocess.run")
+    def test_18_dispatch_dpms_lua_ok_no_fallback(self, mock_subproc):
+        mock_subproc.return_value = MagicMock(stdout="ok\n")
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        daemon._dispatch_dpms("on")
+        mock_subproc.assert_called_once()
+        cmd = mock_subproc.call_args.args[0]
+        self.assertEqual(cmd, ["hyprctl", "dispatch", 'hl.dsp.dpms({ action = "on" })'])
+
+    @patch("subprocess.run")
+    def test_19_dispatch_dpms_legacy_fallback(self, mock_subproc):
+        mock_subproc.return_value = MagicMock(stdout="Invalid dispatcher")
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        daemon._dispatch_dpms("on")
+        self.assertEqual(mock_subproc.call_count, 2)
+        fallback_cmd = mock_subproc.call_args_list[1].args[0]
+        self.assertEqual(fallback_cmd, ["hyprctl", "dispatch", "dpms", "on"])
+
+    @patch("subprocess.run")
+    def test_20_dispatch_dpms_off_with_monitor(self, mock_subproc):
+        mock_subproc.return_value = MagicMock(stdout="err")
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        daemon._dispatch_dpms("off", "eDP-1")
+        self.assertEqual(mock_subproc.call_count, 2)
+        lua_cmd = mock_subproc.call_args_list[0].args[0]
+        self.assertEqual(
+            lua_cmd,
+            [
+                "hyprctl",
+                "dispatch",
+                'hl.dsp.dpms({ action = "off", monitor = "eDP-1" })',
+            ],
+        )
+        fallback_cmd = mock_subproc.call_args_list[1].args[0]
+        self.assertEqual(fallback_cmd, ["hyprctl", "dispatch", "dpms", "off", "eDP-1"])
+
+    @patch.object(HyprCRDDaemon, "_dispatch_dpms")
+    def test_21_lid_closed_restores_dpms_off(self, mock_dpms):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        with patch(
+            "glob.glob", return_value=["/proc/acpi/button/lid/LID0/state"]
+        ), patch("builtins.open", mock_open(read_data="state:          closed")):
+            daemon._check_restore_lid_sleep()
+        mock_dpms.assert_called_once_with("off", "eDP-1")
+
+    @patch.object(HyprCRDDaemon, "_dispatch_dpms")
+    @patch("time.sleep")
+    def test_22_keepalive_dispatches_dpms_on(self, mock_sleep, mock_dpms):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        daemon.running = True
+        daemon.active_clients = 1
+
+        def stop_after_one_sleep(_seconds):
+            daemon.keepalive_running = False
+
+        mock_sleep.side_effect = stop_after_one_sleep
+        daemon._start_display_keepalive()
+        daemon.keepalive_thread.join(timeout=5)
+        mock_dpms.assert_called_once_with("on")
+
+    @patch("subprocess.run")
+    def test_24_dispatch_dpms_exception(self, mock_subproc):
+        mock_subproc.side_effect = Exception("hyprctl unavailable")
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        daemon._dispatch_dpms("on")
+        mock_subproc.assert_called_once()
+
+    @patch.object(HyprCRDDaemon, "_dispatch_dpms", side_effect=Exception("boom"))
+    def test_25_wake_display_dispatch_exception(self, mock_dpms):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        daemon._wake_display()
+        mock_dpms.assert_called_once_with("on")
+
+    def test_26_keepalive_already_running(self):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        daemon.keepalive_running = True
+        daemon._start_display_keepalive()
+        self.assertIsNone(daemon.keepalive_thread)
+
+    @patch.object(HyprCRDDaemon, "_dispatch_dpms")
+    def test_27_lid_state_read_error(self, mock_dpms):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        with patch(
+            "glob.glob", return_value=["/proc/acpi/button/lid/LID0/state"]
+        ), patch("builtins.open", side_effect=OSError("no lid")):
+            daemon._check_restore_lid_sleep()
+        mock_dpms.assert_not_called()
+
+    def test_28_no_string_form_dpms_dispatch_in_repo(self):
+        # hl.dsp.dpms("on") is silently ignored under a Lua config; the table
+        # form hl.dsp.dpms({ action = "on" }) is required everywhere.
+        pattern = re.compile(r"hl\.dsp\.dpms\(\s*[\"']")
+        scan_dirs = ("bin/", "core/", "scripts/", "systemd/", "config/")
+        tracked = subprocess.check_output(
+            ["git", "ls-files"], cwd=BASE_DIR, text=True
+        ).splitlines()
+        for rel in tracked:
+            if not rel.startswith(scan_dirs):
+                continue
+            path = os.path.join(BASE_DIR, rel)
+            try:
+                with open(path, "rb") as f:
+                    data = f.read()
+            except OSError:
+                continue
+            if data.startswith(b"\x7fELF") or b"\x00" in data:
+                continue
+            match = pattern.search(data.decode("utf-8", errors="replace"))
+            self.assertIsNone(
+                match,
+                f"{rel} uses string-form hl.dsp.dpms(...) ignored by Lua configs",
+            )
 
 
 if __name__ == "__main__":

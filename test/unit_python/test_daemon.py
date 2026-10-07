@@ -493,9 +493,21 @@ class TestHyprCRDDaemon(unittest.TestCase):
         # form hl.dsp.dpms({ action = "on" }) is required everywhere.
         pattern = re.compile(r"hl\.dsp\.dpms\(\s*[\"']")
         scan_dirs = ("bin/", "core/", "scripts/", "systemd/", "config/")
-        tracked = subprocess.check_output(
-            ["git", "ls-files"], cwd=BASE_DIR, text=True
-        ).splitlines()
+        try:
+            tracked = subprocess.check_output(
+                ["git", "ls-files"], cwd=BASE_DIR, text=True
+            ).splitlines()
+        except (OSError, subprocess.CalledProcessError):
+            # Environments where git refuses the checkout (e.g. containers
+            # running as a different uid than the files' owner): scan the
+            # source directories directly.
+            tracked = []
+            for scan_dir in scan_dirs:
+                for root, _, files in os.walk(os.path.join(BASE_DIR, scan_dir)):
+                    tracked += [
+                        os.path.relpath(os.path.join(root, name), BASE_DIR)
+                        for name in files
+                    ]
         for rel in tracked:
             if not rel.startswith(scan_dirs):
                 continue

@@ -36,7 +36,7 @@ else
         fi
     done
     sleep 1
-    echo "✓ Isolated Hyprland live on $RUNTIME_DIR/wayland-2"
+    echo "[ok] Isolated Hyprland live on $RUNTIME_DIR/wayland-2"
 fi
 
 export WAYLAND_DISPLAY="wayland-2"
@@ -47,14 +47,14 @@ if ! pgrep -f "hyprcrd-portal" >/dev/null; then
     echo "Starting hyprcrd-portal on wayland-2..."
     "$BIN_DIR/hyprcrd-portal" >"$RUNTIME_DIR/hyprcrd-portal.log" 2>&1 &
     sleep 1
-    echo "✓ hyprcrd-portal started."
+    echo "[ok] hyprcrd-portal started."
 fi
 
 # Launch a terminal inside wayland-2 so the desktop has visible interactive content
 if ! pgrep -f "kitty --title hyprEmpoleonTest" >/dev/null; then
     echo "Launching terminal inside isolated Hyprland..."
     kitty --title "hyprEmpoleonTest - Native Hyprland Terminal" >/dev/null 2>&1 &
-    echo "✓ Terminal mapped."
+    echo "[ok] Terminal mapped."
 fi
 
 echo "=== Isolated Session Ready ==="

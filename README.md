@@ -3,10 +3,8 @@
 Native Wayland and PipeWire host for Google Chrome Remote Desktop on Hyprland.
 
 [![CI Pipeline](https://github.com/jxoesneon/hyprCRD/actions/workflows/ci.yml/badge.svg)](https://github.com/jxoesneon/hyprCRD/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-95%25-green.svg)](https://github.com/jxoesneon/hyprCRD)
-[![AUR version](https://img.shields.io/aur/version/hyprcrd-git.svg)](https://aur.archlinux.org/packages/hyprcrd-git)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Hyprland Compatibility](https://img.shields.io/badge/Hyprland-v0.40+-blue.svg)](https://hyprland.org)
+[![Hyprland Compatibility](https://img.shields.io/badge/Hyprland-v0.56+-blue.svg)](https://hyprland.org)
 
 `hyprCRD` provides native host support for Google Chrome Remote Desktop on the Hyprland Wayland compositor. It streams the active hardware-accelerated desktop session directly over WebRTC, avoiding virtual X11 framebuffers (`Xvfb`) and auxiliary display environments.
 
@@ -66,29 +64,13 @@ For technical details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 | **System XKB Keymap and Modifiers** | Basic US | No | Supported (Compositor keymap synthesis) |
 | **Mobile Client Overlays** | Partial | No | Supported (Ctrl, Alt, Super, Function keys) |
 | **Unprivileged Execution** | No (Requires PAM root) | No | Supported (`systemd --user`) |
-| **Automated Test Coverage** | None | None | Comprehensive (95% line coverage) |
+| **Automated Test Coverage** | None | None | Unit and isolated-integration suites (95% Python line coverage gate) |
 
 ---
 
 ## Installation
 
-### Arch User Repository (AUR)
-
-```bash
-# Using paru
-paru -S hyprcrd-git
-
-# Using yay
-yay -S hyprcrd-git
-```
-
-### Flatpak
-
-```bash
-flatpak install flathub org.hyprland.hyprcrd
-```
-
-### Building from Source
+### From source (`make install`)
 
 ```bash
 # Clone repository
@@ -101,9 +83,81 @@ sudo pacman -S --needed base-devel cmake ninja sdbus-c++ libei libxkbcommon wayl
 # Build components
 make all
 
-# Download upstream Google binaries for local development
+# Download the pinned, checksum-verified upstream Google binaries
 make fetch-google-deps
+
+# Install under PREFIX (default /usr/local; set PREFIX=/usr for a system layout)
+sudo make install
 ```
+
+`make install` places `hyprcrd` in `$(PREFIX)/bin`, the portal, PAM shim, picker, daemon, and Google components in `$(PREFIX)/lib/hyprcrd`, and installs the systemd user unit, the D-Bus activation service, the portal descriptor, and example configuration under `$(PREFIX)/share`. `DESTDIR` and `PREFIX` are honored for staged installs; `make uninstall` removes the installed files.
+
+### Arch User Repository (AUR)
+
+An AUR package is prepared under `packaging/aur` and will be published once AUR account registration reopens.
+
+### Flatpak (experimental)
+
+An experimental Flatpak manifest is provided under `packaging/flatpak/` for
+building a local bundle (`io.github.jxoesneon.hyprcrd`). It is **not** published
+to Flathub and is not the recommended installation route: the portal backend
+registration and the screen picker live outside the sandbox, so the host-side
+setup described in [Configuration](#configuration) still applies.
+
+---
+
+## Configuration
+
+### Portal routing
+
+xdg-desktop-portal must route `org.freedesktop.impl.portal.RemoteDesktop` requests to the `hypr-remote` backend. It reads the user-level routing file from `~/.config/xdg-desktop-portal/hyprland-portals.conf`:
+
+```ini
+[preferred]
+default=hyprland;gtk
+org.freedesktop.impl.portal.RemoteDesktop=hypr-remote
+```
+
+An annotated example is installed to `$(PREFIX)/share/hyprcrd/hyprland-portals.conf` (source: `config/hyprland-portals.conf`).
+
+### Picker configuration
+
+When `xdg-desktop-portal-hyprland` needs a screen selection dialog, it invokes a picker binary. Configure it in `~/.config/hypr/xdph.conf`:
+
+```ini
+screencopy {
+    allow_token_by_default = true
+    custom_picker_binary = /usr/lib/hyprcrd/hyprcrd-picker
+}
+```
+
+Adjust the path to the installed `LIBEXECDIR` (default `/usr/local/lib/hyprcrd`). A ready example is installed to `$(PREFIX)/share/hyprcrd/xdph-screencopy.conf.example`.
+
+### Runtime paths
+
+| File | Location |
+| :--- | :--- |
+| PID file | `$XDG_RUNTIME_DIR/hyprcrd/hyprcrd.pid` |
+| Picker handshake marker | `$XDG_RUNTIME_DIR/hyprcrd/select-pending` |
+| Log file | `$XDG_STATE_HOME/hyprcrd/hyprcrd.log` (default `~/.local/state/hyprcrd/hyprcrd.log`) |
+
+Both directories are created with `0700` permissions.
+
+### Upstream component updates
+
+The pinned Chrome Remote Desktop host version can be checked against Google's apt index without downloading:
+
+```bash
+./scripts/fetch_google_binaries.sh --check-update
+```
+
+Exit status is `0` when the pin is current and `2` when a newer upstream release exists.
+
+### Supported versions
+
+- Hyprland >= 0.56 (Lua and hyprlang configuration styles)
+- xdg-desktop-portal-hyprland >= 1.4
+- Chrome Remote Desktop host 155.0.8059.19 (pinned and checksum-verified)
 
 ---
 
@@ -141,7 +195,7 @@ Example status output:
 [hyprCRD Status]
   Daemon:         ACTIVE (PID: 3715)
   Portal Bridge:  ONLINE (PID: 1572)
-  Enrolled Host:  workstation (ID: 855a3928-3500-4401-8b45-1a3206d55740)
+  Enrolled Host:  workstation (ID: 00000000-0000-4000-8000-000000000000)
 ```
 
 ---

@@ -1,4 +1,18 @@
-app-id: org.hyprland.hyprcrd
+# ==============================================================================
+# EXPERIMENTAL - hyprCRD Flatpak manifest
+#
+# This manifest is NOT published to Flathub and is not the recommended
+# installation route. A portal backend cannot register itself from inside the
+# sandbox (xdg-desktop-portal only reads .portal descriptors from host
+# directories), the screen picker must run on the host, and hyprctl is not part
+# of the Flatpak runtime. Use this manifest to build a local bundle only.
+#
+# Host-side setup still applies as described in README "Configuration" (portal
+# registration + picker live outside the sandbox). The pinned Google host
+# components are fetched as Flatpak extra-data at install time and can also be
+# refreshed on the user side with `hyprcrd install-host`.
+# ==============================================================================
+app-id: io.github.jxoesneon.hyprcrd
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
@@ -25,6 +39,11 @@ finish-args:
   - --talk-name=org.freedesktop.impl.portal.desktop.hyprland
   - --talk-name=org.freedesktop.DBus
   - --own-name=org.freedesktop.impl.portal.desktop.hypr-remote
+
+  # Hyprland IPC socket dir (instance discovery) and flatpak-spawn for
+  # host-side commands such as hyprctl
+  - --filesystem=xdg-run/hypr
+  - --talk-name=org.freedesktop.Flatpak
 
   # Host configuration access
   - --filesystem=xdg-config/chrome-remote-desktop:create
@@ -80,10 +99,6 @@ modules:
   - name: hyprcrd
     buildsystem: simple
     build-commands:
-      # Unpack official Chrome Remote Desktop debian package
-      - ar -x chrome-remote-desktop_155.0.8059.19_amd64.deb data.tar.xz || bsdtar -xf chrome-remote-desktop_155.0.8059.19_amd64.deb data.tar.xz
-      - mkdir -p crd-deb-data && bsdtar -xf data.tar.xz -C crd-deb-data
-
       # Build portal
       - cmake -B portal/build -S portal -G Ninja -DCMAKE_BUILD_TYPE=Release
       - cmake --build portal/build
@@ -91,20 +106,40 @@ modules:
       # Build PAM shim
       - gcc -shared -fPIC -O2 -Wall -Wextra core/pam_shim.c -o bin/pam_shim.so $(pkg-config --cflags --libs gio-2.0 libpipewire-0.3) -ldl
 
-      # Install files
+      # Install files. The Google host .deb is fetched as extra-data when the
+      # bundle is installed and unpacked by apply_extra into /app/extra; the
+      # /app/lib/hyprcrd symlinks keep find_component() lookups working.
       - install -dm755 /app/bin /app/lib/hyprcrd /app/share/applications /app/share/icons/hicolor/scalable/apps
       - install -m755 bin/hyprcrd /app/bin/hyprcrd
       - install -m755 bin/hyprcrd-portal /app/lib/hyprcrd/hyprcrd-portal
       - install -m755 bin/pam_shim.so /app/lib/hyprcrd/pam_shim.so
       - install -m755 core/daemon.py /app/lib/hyprcrd/daemon.py
-      - install -m755 crd-deb-data/opt/google/chrome-remote-desktop/chrome-remote-desktop-host /app/lib/hyprcrd/chrome-remote-desktop-host
-      - install -m644 crd-deb-data/opt/google/chrome-remote-desktop/libremoting_core.so /app/lib/hyprcrd/libremoting_core.so
-      - install -m644 crd-deb-data/opt/google/chrome-remote-desktop/icudtl.dat /app/lib/hyprcrd/icudtl.dat
-      - cp -r crd-deb-data/opt/google/chrome-remote-desktop/remoting_locales /app/lib/hyprcrd/
+      - install -Dm755 apply_extra /app/bin/apply_extra
+      - install -Dm644 scripts/crd_version.env /app/share/hyprcrd/crd_version.env
+      - ln -sf /app/extra/chrome-remote-desktop-host /app/lib/hyprcrd/chrome-remote-desktop-host
+      - ln -sf /app/extra/crashpad-handler /app/lib/hyprcrd/crashpad-handler
+      - ln -sf /app/extra/native-messaging-host /app/lib/hyprcrd/native-messaging-host
+      - ln -sf /app/extra/start-host /app/lib/hyprcrd/start-host
+      - ln -sf /app/extra/libremoting_core.so /app/lib/hyprcrd/libremoting_core.so
+      - ln -sf /app/extra/icudtl.dat /app/lib/hyprcrd/icudtl.dat
+      - ln -sf /app/extra/remoting_locales /app/lib/hyprcrd/remoting_locales
     sources:
       - type: dir
         path: ../..
-      - type: file
+      # Downloaded by flatpak at install time, not during the build; unpacked
+      # by the apply_extra script below.
+      - type: extra-data
+        filename: chrome-remote-desktop.deb
         url: https://dl.google.com/linux/chrome-remote-desktop/deb/pool/main/c/chrome-remote-desktop/chrome-remote-desktop_155.0.8059.19_amd64.deb
         sha256: 39701c6951b3d9edff08143dccad919468e1866b9897c873141dc4f66baaff72
+        size: 20135720
         only-arches: [x86_64]
+      - type: script
+        dest-filename: apply_extra
+        commands:
+          - ar x chrome-remote-desktop.deb data.tar.xz || bsdtar -xf chrome-remote-desktop.deb data.tar.xz
+          - mkdir -p crd-deb-data && tar -xf data.tar.xz -C crd-deb-data
+          - install -Dm755 -t /app/extra crd-deb-data/opt/google/chrome-remote-desktop/chrome-remote-desktop-host crd-deb-data/opt/google/chrome-remote-desktop/crashpad-handler crd-deb-data/opt/google/chrome-remote-desktop/native-messaging-host crd-deb-data/opt/google/chrome-remote-desktop/start-host
+          - install -Dm644 -t /app/extra crd-deb-data/opt/google/chrome-remote-desktop/libremoting_core.so crd-deb-data/opt/google/chrome-remote-desktop/icudtl.dat
+          - cp -r crd-deb-data/opt/google/chrome-remote-desktop/remoting_locales /app/extra/
+          - rm -rf crd-deb-data chrome-remote-desktop.deb data.tar.xz debian-binary control.tar.*

@@ -45,9 +45,9 @@ trap cleanup EXIT INT TERM
 echo -e "\n${BLUE}[1/5] Checking compiled binaries...${NC}"
 for bin in "$BIN_DIR/hyprcrd-portal" "$BIN_DIR/test-virtual-input" "$BIN_DIR/chrome-remote-desktop-host" "$BIN_DIR/pam_shim.so"; do
     if [ -f "$bin" ]; then
-        echo -e "  ✓ Found: $(basename "$bin")"
+        echo -e "  [ok] Found: $(basename "$bin")"
     else
-        echo -e "  ${RED}✗ Missing binary:${NC} $bin"
+        echo -e "  ${RED}[fail] Missing binary:${NC} $bin"
         exit 1
     fi
 done
@@ -69,39 +69,39 @@ while [ ! -S "$RUNTIME_DIR/$TARGET_SOCKET" ]; do
     sleep 0.2
     WAITED=$((WAITED + 1))
     if [ $WAITED -ge 25 ]; then
-        echo -e "  ${RED}✗ Timed out waiting for $RUNTIME_DIR/$TARGET_SOCKET to initialize.${NC}"
+        echo -e "  ${RED}[fail] Timed out waiting for $RUNTIME_DIR/$TARGET_SOCKET to initialize.${NC}"
         tail -n 20 "$RUNTIME_DIR/hyprcrd-isolated-hypr.log"
         exit 1
     fi
 done
 sleep 1
-echo -e "  ${GREEN}✓ Isolated Hyprland live on $RUNTIME_DIR/$TARGET_SOCKET (PID: $HYPR_PID)${NC}"
+echo -e "  ${GREEN}[ok] Isolated Hyprland live on $RUNTIME_DIR/$TARGET_SOCKET (PID: $HYPR_PID)${NC}"
 
 # Step 3: Run Virtual Pointer and Virtual Keyboard Verification
 echo -e "\n${BLUE}[3/5] Testing Wayland virtual pointer and keyboard injection...${NC}"
 export WAYLAND_DISPLAY="$TARGET_SOCKET"
 "$BIN_DIR/test-virtual-input"
-echo -e "  ${GREEN}✓ Wayland virtual input passed with zero errors.${NC}"
+echo -e "  ${GREEN}[ok] Wayland virtual input passed with zero errors.${NC}"
 
 # Step 4: Test hyprcrd-portal Bridge on Isolated Socket
 echo -e "\n${BLUE}[4/5] Testing hyprcrd-portal bridge initialization...${NC}"
 if busctl --user status org.freedesktop.impl.portal.desktop.hypr-remote >/dev/null 2>&1; then
-    echo -e "  ${GREEN}✓ hyprcrd-portal is active and registered on D-Bus ('org.freedesktop.impl.portal.desktop.hypr-remote').${NC}"
+    echo -e "  ${GREEN}[ok] hyprcrd-portal is active and registered on D-Bus ('org.freedesktop.impl.portal.desktop.hypr-remote').${NC}"
 else
     "$BIN_DIR/hyprcrd-portal" >"$RUNTIME_DIR/hyprcrd-isolated-portal.log" 2>&1 &
     PORTAL_PID=$!
     sleep 1.5
 
     if kill -0 "$PORTAL_PID" 2>/dev/null; then
-        echo -e "  ${GREEN}✓ hyprcrd-portal successfully attached to $TARGET_SOCKET (PID: $PORTAL_PID)${NC}"
+        echo -e "  ${GREEN}[ok] hyprcrd-portal successfully attached to $TARGET_SOCKET (PID: $PORTAL_PID)${NC}"
         if busctl --user status org.freedesktop.impl.portal.desktop.hypr-remote >/dev/null 2>&1; then
-            echo -e "  ${GREEN}✓ D-Bus service 'org.freedesktop.impl.portal.desktop.hypr-remote' is registered.${NC}"
+            echo -e "  ${GREEN}[ok] D-Bus service 'org.freedesktop.impl.portal.desktop.hypr-remote' is registered.${NC}"
         fi
         kill "$PORTAL_PID" 2>/dev/null || true
         wait "$PORTAL_PID" 2>/dev/null || true
         PORTAL_PID=""
     else
-        echo -e "  ${RED}✗ hyprcrd-portal failed to stay active.${NC}"
+        echo -e "  ${RED}[fail] hyprcrd-portal failed to stay active.${NC}"
         tail -n 20 "$RUNTIME_DIR/hyprcrd-isolated-portal.log"
         exit 1
     fi
@@ -110,7 +110,7 @@ fi
 # Step 5: Test Official CRD Host Execution with PAM Shim
 echo -e "\n${BLUE}[5/5] Verifying official Google CRD host engine with PAM shim...${NC}"
 CRD_VER=$(LD_LIBRARY_PATH="$BIN_DIR" LD_PRELOAD="$BIN_DIR/pam_shim.so" "$BIN_DIR/chrome-remote-desktop-host" --version)
-echo -e "  ${GREEN}✓ Official Google Remoting Engine version: $CRD_VER${NC}"
-echo -e "  ${GREEN}✓ Dynamic link to libremoting_core.so and pam_shim.so verified.${NC}"
+echo -e "  ${GREEN}[ok] Official Google Remoting Engine version: $CRD_VER${NC}"
+echo -e "  ${GREEN}[ok] Dynamic link to libremoting_core.so and pam_shim.so verified.${NC}"
 
 echo -e "\n${GREEN}Isolated test suite passed (${TARGET_SOCKET}).${NC}"

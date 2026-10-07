@@ -40,7 +40,7 @@ bool LibEIHandler::init(WaylandVirtualKeyboard* kb, WaylandVirtualPointer* ptr) 
     ei_configure_name(ei_context, "Hyprland Remote Desktop Portal");
 
     std::cout << "EI receiver context created for portal file descriptor sharing" << std::endl;
-    std::cout << "✓ LibEI Handler initialized successfully" << std::endl;
+    std::cout << "[ok] LibEI Handler initialized successfully" << std::endl;
     return true;
 }
 

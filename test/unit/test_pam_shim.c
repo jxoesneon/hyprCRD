@@ -46,7 +46,7 @@ static void test_pam_hooks() {
 
     /* 2. pam_start for chrome-remote-desktop */
     pam_handle_t *crd_handle = NULL;
-    r = pam_start("chrome-remote-desktop", "eduardo", &conv, &crd_handle);
+    r = pam_start("chrome-remote-desktop", "testuser", &conv, &crd_handle);
     assert(r == PAM_SUCCESS);
     assert(crd_handle != NULL);
 
@@ -58,7 +58,7 @@ static void test_pam_hooks() {
     r = pam_end(crd_handle, PAM_SUCCESS);
     assert(r == PAM_SUCCESS);
 
-    printf("  ✓ PAM hooks verified successfully.\n");
+    printf("  [ok] PAM hooks verified successfully.\n");
 }
 
 static void test_dlsym_hook() {
@@ -69,7 +69,7 @@ static void test_dlsym_hook() {
 
     void *orig = dlsym(RTLD_DEFAULT, "printf");
     assert(orig != NULL);
-    printf("  ✓ dlsym hook verified successfully.\n");
+    printf("  [ok] dlsym hook verified successfully.\n");
 }
 
 static enum pw_stream_state mock_state_streaming(struct pw_stream *s, const char **err) {
@@ -118,7 +118,7 @@ static void test_pipewire_protection() {
     pw_main_loop_destroy(loop);
     pw_deinit();
 
-    printf("  ✓ PipeWire protection verified successfully.\n");
+    printf("  [ok] PipeWire protection verified successfully.\n");
 }
 
 static void test_screencast_cursor_patch() {
@@ -172,7 +172,7 @@ static void test_screencast_cursor_patch() {
 
     g_variant_unref(params);
     g_variant_unref(patched);
-    printf("  ✓ ScreenCast cursor patch successfully rewritten to 2 (EMBEDDED).\n");
+    printf("  [ok] ScreenCast cursor patch successfully rewritten to 2 (EMBEDDED).\n");
 }
 
 static void test_gdbus_interception() {
@@ -225,7 +225,7 @@ static void test_gdbus_interception() {
     );
 
     g_object_unref(conn);
-    printf("  ✓ GDBus connection calls intercepted and rewritten successfully.\n");
+    printf("  [ok] GDBus connection calls intercepted and rewritten successfully.\n");
 }
 
 int main(int argc, char **argv) {
@@ -241,6 +241,6 @@ int main(int argc, char **argv) {
     test_screencast_cursor_patch();
     test_gdbus_interception();
 
-    printf("\n✓ ALL PAM SHIM TESTS PASSED (100%% Success)!\n");
+    printf("\n[ok] ALL PAM SHIM TESTS PASSED (100%% Success)!\n");
     return 0;
 }

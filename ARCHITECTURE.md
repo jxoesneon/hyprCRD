@@ -66,7 +66,7 @@ When mobile or variable-geometry clients connect, the client emits a `ClientReso
 `pam_shim.so` checks `pw_stream_get_state`. If the stream is in `PW_STREAM_STATE_STREAMING` (3), the renegotiation call is dropped safely, returning `0`. WebRTC's client-side scaler handles display fitting and downscaling smoothly without dropping the 60 FPS hardware capture pipeline.
 
 #### C. Cursor Mode Transpilation
-CRD specifies `cursor_mode = 4` (`METADATA`) during `ScreenCast.SelectSources`. `xdg-desktop-portal-hyprland` only advertises support for `EMBEDDED` (2) and `HIDDEN` (1). `pam_shim.so` intercepts `g_dbus_connection_call` and rewrites `cursor_mode` from 4 to 2, ensuring seamless compatibility.
+CRD specifies `cursor_mode = 4` (`METADATA`) during `ScreenCast.SelectSources`. `xdg-desktop-portal-hyprland` only advertises support for `EMBEDDED` (2) and `HIDDEN` (1). `pam_shim.so` intercepts `g_dbus_connection_call` and rewrites `cursor_mode` from 4 to 2 so the request passes the portal frontend's `AvailableCursorModes` validation.
 
 ---
 
@@ -78,6 +78,28 @@ CRD specifies `cursor_mode = 4` (`METADATA`) during `ScreenCast.SelectSources`. 
 1. **Paired ScreenCast Session Binding**: When `CreateSession` and `Start` are called, `hyprcrd-portal` initiates a concurrent `ScreenCast` session via `xdg-desktop-portal-hyprland`, extracts the resulting PipeWire stream Node IDs, and injects them into CRD's response map.
 2. **EIS Socket Negotiation (`ConnectToEIS`)**: Sets up an Emulated Input System (`libeis`) context, exposes client file descriptors, and registers virtual input seats (`hyprland-portal-seat`).
 3. **Hardware Display Geometry Mapping**: Queries `hyprctl monitors -j` at startup to obtain monitor resolution, position offset, and HiDPI scaling, injecting valid physical coordinate boundaries into the EIS device definitions.
+
+#### Picker Handshake Marker
+
+`xdg-desktop-portal-hyprland` invokes a picker binary (`custom_picker_binary`) for every screen selection request, without identifying the requesting application. To authorize automatic selection for CRD's own screencast only, `hyprcrd-portal` and `hyprcrd-picker` use a handshake marker:
+
+1. Before the paired `ScreenCast.CreateSession` call, the portal writes `$XDG_RUNTIME_DIR/hyprcrd/select-pending` (directory `0700`, file `0600`, content: the portal session handle).
+2. The picker auto-selects the primary monitor only when the marker exists, is owned by the invoking user, and is less than 30 seconds old. It deletes the marker on use.
+3. The portal removes the marker when `ScreenCast.Start` returns (success or failure) and on session `Close`.
+4. Without a valid marker, the picker delegates to the standard `hyprland-share-picker` and exits 1 if none is installed, so no screen is shared silently.
+
+If `XDG_RUNTIME_DIR` is unset the portal skips marker creation and the picker fails closed.
+
+#### DPMS Dispatch Rules
+
+Hyprland 0.56+ with a Lua configuration evaluates `hyprctl dispatch X` as `hl.dispatch(X)`. `hl.dsp.dpms(...)` reads the action only from a table argument. The daemon therefore always uses the table form:
+
+```bash
+hyprctl dispatch 'hl.dsp.dpms({ action = "on" })'
+hyprctl dispatch 'hl.dsp.dpms({ action = "off", monitor = "eDP-1" })'
+```
+
+A plain string argument such as `hl.dsp.dpms("on")` is ignored by the dispatcher and the call defaults to `toggle`, which turns an already-on display off. The legacy `hyprctl dispatch dpms on` form is a Lua syntax error under a Lua config but remains the correct form for hyprlang (`.conf`) configs, so the daemon falls back to it only when the Lua dispatch does not return `ok`. The action is restricted to `on` and `off`; `toggle` is never dispatched.
 
 ---
 
@@ -91,12 +113,12 @@ Input translation operates across two Wayland unstable protocols:
 | **Keyboard** | `zwp_virtual_keyboard_v1` | Scancode injection, dynamic system XKB keymap synthesis, modifier state tracking (Shift, Ctrl, Alt, Super/Meta, CapsLock, NumLock). |
 
 #### Dynamic Keymap Compilation
-To support the full range of client keyboards (including mobile function-key overlays and international layouts), `hyprcrd-portal` initializes `libxkbcommon` with the host's active locale:
+To support the range of client keyboards (including mobile function-key overlays and international layouts), `hyprcrd-portal` initializes `libxkbcommon` with the host's active locale:
 ```cpp
 struct xkb_rule_names names = {};
 struct xkb_keymap* km = xkb_keymap_new_from_names(ctx, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
 ```
-The compiled keymap string is uploaded to compositor shared memory (`memfd_create`) and bound via `zwp_virtual_keyboard_v1_keymap`, ensuring 100% keycode parity between Android/iOS CRD clients and Hyprland.
+The compiled keymap string is uploaded to compositor shared memory (`memfd_create`) and bound via `zwp_virtual_keyboard_v1_keymap`, keeping keycode behavior consistent between Android/iOS CRD clients and Hyprland.
 
 ---
 
@@ -119,7 +141,19 @@ stateDiagram-v2
 
 ---
 
-## 3. Sandboxing & Isolation Constraints
+## 3. Upstream Limitations (CRD 155 Portal Mode)
 
-- **Headless Sandbox Testing**: `test/run_isolated_test.sh` spawns a fully isolated, nested Hyprland compositor on `/run/user/1000/wayland-2` with `isolated-hyprland.conf`. This enables continuous integration and automated end-to-end verification without interfering with the developer's live workstation display.
+The upstream host's portal capture path in CRD 155 does not implement several RemoteDesktop features. These are upstream gaps (tracked in `crbug.com/445973705`), not hyprCRD bugs:
+
+- **Curtain mode** (blanking the local display while streaming): unimplemented.
+- **Clipboard synchronization**: unimplemented.
+- **Remote resize / display resizer**: unimplemented; client resolution changes are handled by the `pam_shim.so` renegotiation guard plus client-side scaling.
+
+The `cursor_mode` rewrite in `pam_shim.so` remains necessary in CRD 155: the xdg-desktop-portal frontend validates the requested cursor mode against the backend's advertised `AvailableCursorModes`, and `xdg-desktop-portal-hyprland` does not advertise `METADATA` (4), so the request would be rejected without the rewrite to `EMBEDDED` (2).
+
+---
+
+## 4. Sandboxing & Isolation Constraints
+
+- **Headless Sandbox Testing**: `test/run_isolated_test.sh` spawns an isolated, nested Hyprland compositor on a separate Wayland socket with `isolated-hyprland.conf`. This enables continuous integration and automated end-to-end verification without interfering with the live workstation display.
 - **Rootless Operation**: No component requires root privileges, setuid binaries, or custom kernel modules.

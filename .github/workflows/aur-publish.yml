@@ -1,9 +1,11 @@
 name: Publish to AUR
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # AUR publishing is paused until account registration reopens.
+  # Re-enable the tag trigger when publishing resumes:
+  # push:
+  #   tags:
+  #     - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -12,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
@@ -33,7 +35,7 @@ jobs:
 
       - name: Publish to AUR
         if: steps.check_secrets.outputs.configured == 'true'
-        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        uses: KSXGitHub/github-actions-deploy-aur@a97f56a8425a7a7f3b8c58607f769c69b089cadb # v3.0.1
         with:
           pkgname: hyprcrd-git
           pkgbuild: packaging/aur/PKGBUILD

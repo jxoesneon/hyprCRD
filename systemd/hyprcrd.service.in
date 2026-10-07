@@ -1,18 +1,17 @@
 [Unit]
 Description=hyprCRD - Native Chrome Remote Desktop for Hyprland
+PartOf=graphical-session.target
 After=graphical-session.target
 Wants=xdg-desktop-portal.service
-Documentation=file:///home/eduardo/hyprCRD/README.md
+Documentation=https://github.com/jxoesneon/hyprCRD
 
 [Service]
 Type=simple
 ExecStartPre=/bin/sh -c 'dbus-update-activation-environment --systemd XDG_CURRENT_DESKTOP WAYLAND_DISPLAY; busctl --user introspect org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop 2>/dev/null | grep -q "portal.RemoteDesktop" || systemctl --user restart xdg-desktop-portal.service; sleep 1'
-ExecStart=/home/eduardo/hyprCRD/bin/hyprcrd start -f
+ExecStart=@BINDIR@/hyprcrd start -f
 Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
-Environment=WAYLAND_DISPLAY=wayland-1
-Environment=XDG_CURRENT_DESKTOP=Hyprland
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

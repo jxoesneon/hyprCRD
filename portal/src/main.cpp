@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Failed to initialize Wayland virtual keyboard" << std::endl;
         return 1;
     }
-    std::cout << "✓ Virtual keyboard initialized" << std::endl;
+    std::cout << "[ok] Virtual keyboard initialized" << std::endl;
 
     // Initialize Wayland virtual pointer
     if (!waylandVP.init()) {
@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
         waylandVK.cleanup();
         return 1;
     }
-    std::cout << "✓ Virtual pointer initialized" << std::endl;
+    std::cout << "[ok] Virtual pointer initialized" << std::endl;
 
     // Initialize libei handler
     if (!libeiHandler.init(&waylandVK, &waylandVP)) {
@@ -51,12 +51,12 @@ int main(int argc, char* argv[]) {
         waylandVK.cleanup();
         return 1;
     }
-    std::cout << "✓ LibEI handler initialized" << std::endl;
+    std::cout << "[ok] LibEI handler initialized" << std::endl;
 
     // Start LibEI handler in background thread
     std::thread libei_thread([&libeiHandler]() { libeiHandler.run(); });
 
-    std::cout << "✓ LibEI handler started and ready for connections" << std::endl;
+    std::cout << "[ok] LibEI handler started and ready for connections" << std::endl;
 
     // Initialize portal
     if (!portal.init(&libeiHandler)) {
@@ -66,9 +66,9 @@ int main(int argc, char* argv[]) {
         waylandVK.cleanup();
         return 1;
     }
-    std::cout << "✓ D-Bus portal initialized" << std::endl;
+    std::cout << "[ok] D-Bus portal initialized" << std::endl;
 
-    std::cout << "\n🚀 Hyprland Remote Desktop Portal is ready!" << std::endl;
+    std::cout << "\nHyprland Remote Desktop Portal ready." << std::endl;
     std::cout << "Portal available at: org.freedesktop.impl.portal.desktop.hypr-remote"
               << std::endl;
     std::cout << "Press Ctrl+C to stop." << std::endl;
@@ -100,6 +100,6 @@ int main(int argc, char* argv[]) {
     waylandVP.cleanup();
     waylandVK.cleanup();
 
-    std::cout << "✓ Shutdown complete" << std::endl;
+    std::cout << "[ok] Shutdown complete" << std::endl;
     return 0;
 }

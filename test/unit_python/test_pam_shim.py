@@ -6,8 +6,12 @@ and D-Bus ScreenCast parameter rewriting.
 """
 
 import os
+import sys
 import ctypes
+import shutil
+import tempfile
 import unittest
+import subprocess
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 SHIM_PATH = os.path.join(BASE_DIR, "bin", "pam_shim.so")
@@ -31,7 +35,7 @@ class TestPamShim(unittest.TestCase):
         # 1. pam_start for chrome-remote-desktop
         res = self.lib.pam_start(
             b"chrome-remote-desktop",
-            b"eduardo",
+            b"testuser",
             ctypes.byref(conv),
             ctypes.byref(handle),
         )
@@ -65,6 +69,38 @@ class TestPamShim(unittest.TestCase):
         self.assertIsNotNone(
             sym, "dlsym should return pointer for pw_stream_update_params"
         )
+
+    def test_04_pam_unavailable_fails_closed(self):
+        """With no resolvable libpam, hooks must return PAM_SYSTEM_ERR (4)."""
+        gcc = shutil.which("gcc")
+        if not gcc or not os.path.exists(SHIM_PATH):
+            self.skipTest("gcc or pam_shim.so not available")
+
+        with tempfile.TemporaryDirectory() as stub_dir:
+            stub = os.path.join(stub_dir, "libpam.so.0")
+            subprocess.run(
+                [gcc, "-shared", "-fPIC", "-o", stub, "-x", "c", os.devnull],
+                check=True,
+            )
+            probe = (
+                "import ctypes;"
+                f"lib=ctypes.CDLL({SHIM_PATH!r});"
+                "h=ctypes.c_void_p();"
+                "r1=lib.pam_start(b'chrome-remote-desktop',b'testuser',None,ctypes.byref(h));"
+                "r2=lib.pam_acct_mgmt(h,0);"
+                "r3=lib.pam_end(h,0);"
+                "print(r1,r2,r3)"
+            )
+            env = os.environ.copy()
+            env["LD_LIBRARY_PATH"] = stub_dir
+            out = subprocess.run(
+                [sys.executable, "-c", probe],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        self.assertEqual(out.stdout.strip(), "4 4 4")
 
 
 if __name__ == "__main__":

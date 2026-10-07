@@ -24,19 +24,19 @@ PASSED_TESTS=0
 run_suite() {
     local name="$1"
     local cmd="$2"
-    echo -e "\n${BLUE}▶ Running: ${BOLD}$name${NC}"
+    echo -e "\n${BLUE}=> Running: ${BOLD}$name${NC}"
     if eval "$cmd"; then
-        echo -e "${GREEN}✓ $name passed${NC}"
+        echo -e "${GREEN}[ok] $name passed${NC}"
         PASSED_TESTS=$((PASSED_TESTS + 1))
     else
-        echo -e "${RED}✗ $name failed${NC}"
+        echo -e "${RED}[fail] $name failed${NC}"
         exit 1
     fi
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
 }
 
 # Pre-build C/C++ unit test harnesses
-echo -e "\n${BLUE}▶ Compiling C/C++ unit test harnesses...${NC}"
+echo -e "\n${BLUE}=> Compiling C/C++ unit test harnesses...${NC}"
 # shellcheck disable=SC2046
 gcc -DTESTING_COVERAGE -fprofile-arcs -ftest-coverage -o "$BASE_DIR/test/unit/run_test_pam_shim" \
     "$BASE_DIR/test/unit/test_pam_shim.c" "$BASE_DIR/core/pam_shim.c" \
@@ -51,7 +51,7 @@ g++ -std=c++20 -o "$BASE_DIR/test/unit/run_test_portal_logic" \
     "$BASE_DIR/portal/build/libwayland_protocols.a" \
     -I"$BASE_DIR/portal/build/generated" \
     $(pkg-config --cflags --libs wayland-client xkbcommon) -lpthread
-echo -e "${GREEN}✓ Unit test harnesses compiled.${NC}"
+echo -e "${GREEN}[ok] Unit test harnesses compiled.${NC}"
 
 # 1. C PAM Shim Unit Tests & gcov Line Coverage
 run_suite "C PAM Shim & PipeWire Protection Unit Tests (gcov)" \
@@ -85,7 +85,11 @@ else
         "python3 -m unittest discover -s $BASE_DIR/test/unit_python"
 fi
 
-# 5. Full End-to-End Isolated Wayland Integration Test
+# 5. Staged Install Layout Verification
+run_suite "DESTDIR Install Layout Staging" \
+    "$BASE_DIR/test/check_install_layout.sh"
+
+# 6. Full End-to-End Isolated Wayland Integration Test
 run_suite "End-to-End Isolated Hyprland Session Integration Test" \
     "$BASE_DIR/test/run_isolated_test.sh"
 

@@ -97,7 +97,7 @@ static void test_monitor_parser() {
     assert(m4.width == 2560);
     assert(m4.height == 1600);
 
-    std::cout << "  ✓ Monitor parser test passed with 100% assertions." << std::endl;
+    std::cout << "  [ok] Monitor parser test passed with 100% assertions." << std::endl;
 }
 
 static void test_modifier_state_tracker() {
@@ -173,7 +173,7 @@ static void test_modifier_state_tracker() {
     assert(depressed == 0);
     assert(locked == 0);
 
-    std::cout << "  ✓ Modifier state tracking passed with 100% assertions." << std::endl;
+    std::cout << "  [ok] Modifier state tracking passed with 100% assertions." << std::endl;
 }
 
 static void test_wayland_virtual_pointer_methods() {
@@ -193,7 +193,7 @@ static void test_wayland_virtual_pointer_methods() {
     pointer.send_frame();
     pointer.cleanup();
 
-    std::cout << "  ✓ WaylandVirtualPointer safety assertions passed." << std::endl;
+    std::cout << "  [ok] WaylandVirtualPointer safety assertions passed." << std::endl;
 }
 
 static void test_wayland_virtual_keyboard_methods() {
@@ -206,7 +206,7 @@ static void test_wayland_virtual_keyboard_methods() {
     keyboard.send_modifiers(1, 0, 0, 0);
     keyboard.cleanup();
 
-    std::cout << "  ✓ WaylandVirtualKeyboard safety assertions passed." << std::endl;
+    std::cout << "  [ok] WaylandVirtualKeyboard safety assertions passed." << std::endl;
 }
 
 static void test_select_marker_helpers() {
@@ -246,10 +246,17 @@ static void test_select_marker_helpers() {
     clearSelectMarker();
     assert(!fs::exists(marker));
 
+    // write into a non-writable marker dir fails closed
+    fs::permissions(marker.parent_path(),
+                    fs::perms::owner_read | fs::perms::owner_exec);
+    writeSelectMarker("/session/blocked");
+    assert(!fs::exists(marker));
+    fs::permissions(marker.parent_path(), fs::perms::owner_all);
+
     fs::remove_all(dir);
     unsetenv("XDG_RUNTIME_DIR");
 
-    std::cout << "  ✓ Select marker helpers passed with 100% assertions." << std::endl;
+    std::cout << "  [ok] Select marker helpers passed with 100% assertions." << std::endl;
 }
 
 int main() {
@@ -263,6 +270,6 @@ int main() {
     test_wayland_virtual_keyboard_methods();
     test_select_marker_helpers();
 
-    std::cout << "\n✓ ALL PORTAL LOGIC TESTS PASSED (100% Success)!" << std::endl;
+    std::cout << "\n[ok] ALL PORTAL LOGIC TESTS PASSED (100% Success)!" << std::endl;
     return 0;
 }

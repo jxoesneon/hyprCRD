@@ -18,7 +18,7 @@ int main() {
         std::cerr << "Failed to initialize virtual pointer" << std::endl;
         return 1;
     }
-    std::cout << "✓ Virtual pointer initialized successfully" << std::endl;
+    std::cout << "[ok] Virtual pointer initialized successfully" << std::endl;
 
     WaylandVirtualKeyboard keyboard;
     if (!keyboard.init()) {
@@ -26,7 +26,7 @@ int main() {
         pointer.cleanup();
         return 1;
     }
-    std::cout << "✓ Virtual keyboard initialized successfully" << std::endl;
+    std::cout << "[ok] Virtual keyboard initialized successfully" << std::endl;
 
     // Get current time
     uint32_t time = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -43,13 +43,13 @@ int main() {
         pointer.send_frame();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    std::cout << "✓ Relative mouse movement verified" << std::endl;
+    std::cout << "[ok] Relative mouse movement verified" << std::endl;
 
     // 2. Test absolute mouse motion
     std::cout << "Testing absolute mouse motion..." << std::endl;
     pointer.send_motion_absolute(time + 400, 500, 400, 1920, 1080);
     pointer.send_frame();
-    std::cout << "✓ Absolute mouse motion verified" << std::endl;
+    std::cout << "[ok] Absolute mouse motion verified" << std::endl;
 
     // 3. Test mouse clicks (Left, Right, Middle)
     std::cout << "Testing mouse buttons (Left, Right, Middle)..." << std::endl;
@@ -70,7 +70,7 @@ int main() {
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     pointer.send_button(time + 600, BTN_MIDDLE, 0);
     pointer.send_frame();
-    std::cout << "✓ Mouse button clicks verified" << std::endl;
+    std::cout << "[ok] Mouse button clicks verified" << std::endl;
 
     // 4. Test scrolling (discrete & continuous)
     std::cout << "Testing mouse scrolling (discrete & continuous)..." << std::endl;
@@ -83,7 +83,7 @@ int main() {
     pointer.send_axis(time + 800, WL_POINTER_AXIS_HORIZONTAL_SCROLL, -15.0);
     pointer.send_axis_stop(time + 830, WL_POINTER_AXIS_HORIZONTAL_SCROLL);
     pointer.send_frame();
-    std::cout << "✓ Mouse scrolling verified" << std::endl;
+    std::cout << "[ok] Mouse scrolling verified" << std::endl;
 
     // 5. Test keyboard keystrokes and modifiers (Letters, Modifiers, Function keys)
     std::cout << "Testing keyboard key press & modifiers (KEY_A, Shift, Ctrl, Alt, Super, F1)..."
@@ -116,10 +116,10 @@ int main() {
     keyboard.send_key(time + 1200, KEY_ESC, 1);
     keyboard.send_key(time + 1230, KEY_ESC, 0);
 
-    std::cout << "✓ Keyboard key presses and modifiers verified" << std::endl;
+    std::cout << "[ok] Keyboard key presses and modifiers verified" << std::endl;
 
     pointer.cleanup();
     keyboard.cleanup();
-    std::cout << "✓ All Wayland virtual input tests passed." << std::endl;
+    std::cout << "[ok] All Wayland virtual input tests passed." << std::endl;
     return 0;
 }

@@ -4,7 +4,7 @@
 
 ## 1. Threat Model & Security Posture
 
-`hyprCRD` is designed strictly around a **defense-in-depth, zero-root privilege model**. Because Chrome Remote Desktop transmits screen captures and grants administrative keystroke and pointer control over remote channels, security is paramount.
+`hyprCRD` is designed around a defense-in-depth, zero-root privilege model. Chrome Remote Desktop transmits screen captures and grants remote keystroke and pointer control, so the integration layer is kept small and auditable.
 
 ### Security Guarantees:
 1. **Zero Root Requirements**:
@@ -23,22 +23,30 @@
 
 ## 2. Supported Versions
 
-| Version | Supported | Critical Fixes | Security Reviews |
-| :--- | :---: | :---: | :---: |
-| 1.0.x / 1.0.0-rc.1 | Yes | Yes | Ongoing |
-| < 1.0.0 | No | No | Deprecated |
+| Version | Supported |
+| :--- | :---: |
+| X.Y.x | |
+| 1.0.x | yes |
+| < 1.0 (pre-releases) | no |
 
 ---
 
-## 3. Reporting a Vulnerability
+## 3. Security Model
 
-We deeply appreciate the efforts of security researchers in keeping `hyprCRD` and the open-source Linux desktop secure.
+- **Rootless PAM bypass scope**: `pam_shim.so` returns `PAM_SUCCESS` for `pam_acct_mgmt` only when the PAM service name is `chrome-remote-desktop`. All other PAM entry points pass through to the system libpam unchanged. The shim is preloaded only into the `chrome-remote-desktop-host` process; it does not affect other programs.
+- **Picker auto-approval**: `hyprcrd-picker` auto-selects a screen only when `$XDG_RUNTIME_DIR/hyprcrd/select-pending` exists, is owned by the invoking user, and is less than 30 seconds old. The marker is written by `hyprcrd-portal` solely for its own paired ScreenCast session and is consumed on use. All other requests go to the standard picker; without one the picker fails closed.
+  - *Residual limitation*: the marker is a file, not a cryptographic capability. A same-UID process can forge it to self-authorize auto-approval within the 30-second window. This is accepted because same-UID processes already hold equivalent authority over the session bus, the Hyprland IPC socket, and screen content; the marker narrows auto-approval across processes *within* that trust boundary, not against it. It does not protect against a compromised user session.
+- **Runtime files**: PID file, log file, and handshake markers live under `$XDG_RUNTIME_DIR/hyprcrd/` and `$XDG_STATE_HOME/hyprcrd/` with `0700` directory permissions. Nothing is stored in world-writable `/tmp`.
+- **Verified upstream package**: `scripts/fetch_google_binaries.sh` downloads a versioned `.deb` and aborts on SHA-256 mismatch against a pinned digest.
+
+---
+
+## 4. Reporting a Vulnerability
 
 If you believe you have discovered a security vulnerability in `hyprCRD`:
 
-1. **Do NOT disclose the issue publicly** (e.g. do not open a public GitHub issue, pull request, or social media post).
-2. Submit a report through **GitHub Private Vulnerability Reporting** via the repository's Security Advisory tab.
-3. Alternatively, email the maintainers directly with the subject line `[SECURITY VULNERABILITY] hyprCRD`.
+1. **Do not disclose the issue publicly** (no public GitHub issue, pull request, or social media post).
+2. Submit a report through **GitHub Private Vulnerability Reporting** via the repository's Security Advisory tab, or contact the maintainer through their GitHub profile.
 
 ### Please include in your report:
 - A clear description of the vulnerability and its potential impact.

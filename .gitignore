@@ -25,6 +25,9 @@ bin/native-messaging-host
 bin/start-host
 bin/remoting_locales/
 
+# Local backup of previous Google CRD component versions
+bin/.backup-*/
+
 # Compiled project binaries in bin
 bin/hyprcrd-portal
 bin/pam_shim.so

@@ -40,7 +40,7 @@ sha256sums=(
 
 pkgver() {
     cd "${srcdir}/hyprCRD"
-    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' || echo "1.0.0.rc.1.r$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
+    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' || echo "r$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
 }
 
 prepare() {
@@ -68,19 +68,12 @@ build() {
 package() {
     cd "${srcdir}/hyprCRD"
 
-    # Directory structures
-    install -dm755 "${pkgdir}/usr/bin"
-    install -dm755 "${pkgdir}/usr/lib/hyprcrd"
-    install -dm755 "${pkgdir}/usr/lib/systemd/user"
-    install -dm755 "${pkgdir}/usr/share/licenses/${pkgname}"
-    install -dm755 "${pkgdir}/usr/share/xdg-desktop-portal/portals"
-    install -dm755 "${pkgdir}/usr/share/dbus-1/services"
+    # Install all hyprCRD-owned components, units, and example configuration.
+    # Resolves @BINDIR@=/usr/bin and @LIBEXECDIR@=/usr/lib/hyprcrd.
+    make install DESTDIR="${pkgdir}" PREFIX=/usr
 
-    # Install compiled hyprCRD components
-    install -m755 bin/hyprcrd-portal "${pkgdir}/usr/lib/hyprcrd/hyprcrd-portal"
-    install -m755 bin/pam_shim.so "${pkgdir}/usr/lib/hyprcrd/pam_shim.so"
-    install -m755 core/daemon.py "${pkgdir}/usr/lib/hyprcrd/daemon.py"
-    install -m755 bin/hyprcrd "${pkgdir}/usr/bin/hyprcrd"
+    install -dm755 "${pkgdir}/usr/share/licenses/${pkgname}"
+    install -m644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 
     # Install official Google binaries extracted from .deb
     local DEB_ROOT="${srcdir}/crd-deb-data/opt/google/chrome-remote-desktop"
@@ -91,9 +84,4 @@ package() {
     if [ -d "${DEB_ROOT}/remoting_locales" ]; then
         cp -r "${DEB_ROOT}/remoting_locales" "${pkgdir}/usr/lib/hyprcrd/"
     fi
-
-    # Install D-Bus Portal & Systemd units
-    install -m644 config/hypr-remote.portal "${pkgdir}/usr/share/xdg-desktop-portal/portals/hypr-remote.portal"
-    install -m644 systemd/hyprcrd.service "${pkgdir}/usr/lib/systemd/user/hyprcrd.service"
-    install -m644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 }

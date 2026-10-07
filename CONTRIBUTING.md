@@ -66,9 +66,9 @@ make fetch-google-deps
 ## 4. Testing and Verification Standards
 
 All contributions are validated against automated test suites in CI:
-- **Suite Pass Rate**: 100% of unit and integration test suites must pass.
-- **Python Coverage**: Line coverage $\ge$ 95% (`coverage.py`).
-- **C/C++ Shim Coverage**: Line coverage $\ge$ 90% (`gcov`).
+- **Suite Pass Rate**: all unit and integration test suites must pass.
+- **Python Coverage**: Line coverage >= 95% (`coverage.py`).
+- **C/C++ Shim Coverage**: Line coverage >= 90% (`gcov`).
 
 Run the test suite locally before opening a pull request:
 ```bash
@@ -101,3 +101,13 @@ Standard prefixes:
 2. Implement changes with corresponding test coverage.
 3. Verify that `make test` and `make lint` pass cleanly.
 4. Submit the pull request against `main`.
+
+---
+
+## 6. Release Process
+
+1. Move the `[Unreleased]` entries in `CHANGELOG.md` into a `## [X.Y.Z] - YYYY-MM-DD` section.
+2. Bump the version strings: `__version__` in `bin/hyprcrd`, `__version__` in `core/daemon.py`, and the project version in `portal/CMakeLists.txt`. Keep them identical.
+3. Run `make lint` and `make check`; all suites and coverage gates must pass.
+4. Tag the release with `git tag vX.Y.Z` and push the tag.
+5. The `release` workflow creates a GitHub Release with the matching CHANGELOG section as its body, after verifying the tag matches `__version__`.

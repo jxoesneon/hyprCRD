@@ -8,9 +8,10 @@
 # selection to xdg-desktop-portal-hyprland.
 MARKER="${XDG_RUNTIME_DIR:-}/hyprcrd/select-pending"
 SHARE_PICKER="${HYPRCRD_SHARE_PICKER:-/usr/bin/hyprland-share-picker}"
+HYPR_DIR="${HYPRCRD_HYPR_DIR:-/run/user/$UID/hypr}"
 
 _hypr_instance_alive() {
-    local lock="/run/user/$UID/hypr/$1/hyprland.lock"
+    local lock="$HYPR_DIR/$1/hyprland.lock"
     [ -f "$lock" ] || return 1
     local pid
     pid="$(head -n 1 "$lock" 2>/dev/null)"
@@ -22,7 +23,7 @@ _hypr_instance_alive() {
 if [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ] && ! _hypr_instance_alive "$HYPRLAND_INSTANCE_SIGNATURE"; then
     unset HYPRLAND_INSTANCE_SIGNATURE
 fi
-if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ] && [ -d "/run/user/$UID/hypr" ]; then
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ] && [ -d "$HYPR_DIR" ]; then
     while IFS= read -r dir; do
         case "$dir" in .*) continue ;; esac
         if _hypr_instance_alive "$dir"; then
@@ -30,7 +31,7 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ] && [ -d "/run/user/$UID/hypr" ]; then
             export HYPRLAND_INSTANCE_SIGNATURE
             break
         fi
-    done < <(ls -t "/run/user/$UID/hypr" 2>/dev/null)
+    done < <(ls -t "$HYPR_DIR" 2>/dev/null)
 fi
 
 marker_valid=false

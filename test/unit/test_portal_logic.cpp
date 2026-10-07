@@ -14,6 +14,7 @@
 
 extern "C" {
 #include <linux/input.h>
+#include <unistd.h>
 }
 
 // Simulated JSON parsing from hyprctl monitors -j for test coverage
@@ -247,11 +248,14 @@ static void test_select_marker_helpers() {
     assert(!fs::exists(marker));
 
     // write into a non-writable marker dir fails closed
-    fs::permissions(marker.parent_path(),
-                    fs::perms::owner_read | fs::perms::owner_exec);
-    writeSelectMarker("/session/blocked");
-    assert(!fs::exists(marker));
-    fs::permissions(marker.parent_path(), fs::perms::owner_all);
+    // (root bypasses mode-bit checks, so this case is unverifiable as root)
+    if (geteuid() != 0) {
+        fs::permissions(marker.parent_path(),
+                        fs::perms::owner_read | fs::perms::owner_exec);
+        writeSelectMarker("/session/blocked");
+        assert(!fs::exists(marker));
+        fs::permissions(marker.parent_path(), fs::perms::owner_all);
+    }
 
     fs::remove_all(dir);
     unsetenv("XDG_RUNTIME_DIR");

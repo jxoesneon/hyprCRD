@@ -12,6 +12,9 @@ import signal
 import psutil
 import argparse
 import subprocess
+import hashlib
+import tempfile
+import urllib.request
 from pathlib import Path
 
 __version__ = "1.0.0-rc.1"
@@ -49,23 +52,234 @@ def find_component(name):
     env_name = "HYPRCRD_" + name.upper().replace("-", "_").replace(".", "_")
     if os.environ.get(env_name) and Path(os.environ[env_name]).exists():
         return Path(os.environ[env_name])
+    script_dir = Path(__file__).resolve().parent
     for candidate in [
         BIN_DIR / name,
+        script_dir / name,
+        script_dir.parent / "lib" / "hyprcrd" / name,
+        Path.home() / ".local" / "lib" / "hyprcrd" / name,
         Path(f"/usr/lib/hyprcrd/{name}"),
+        Path(f"/usr/local/lib/hyprcrd/{name}"),
         Path(f"/app/lib/hyprcrd/{name}"),
-        Path(__file__).resolve().parent / name,
     ]:
         if candidate.exists():
             return candidate
     return BIN_DIR / name
 
 
+def find_crd_version_env():
+    """Locate crd_version.env (single source of truth for the pinned CRD package)."""
+    env_override = os.environ.get("HYPRCRD_CRD_VERSION_ENV")
+    if env_override and Path(env_override).exists():
+        return Path(env_override)
+    script_dir = Path(__file__).resolve().parent
+    for candidate in [
+        BASE_DIR / "scripts" / "crd_version.env",
+        script_dir / "crd_version.env",
+        script_dir.parent / "share" / "hyprcrd" / "crd_version.env",
+        Path("/usr/share/hyprcrd/crd_version.env"),
+        Path("/usr/local/share/hyprcrd/crd_version.env"),
+        Path("/app/share/hyprcrd/crd_version.env"),
+    ]:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def load_crd_version():
+    """Parse CRD_VERSION / CRD_SHA256 / URLs from crd_version.env."""
+    env_path = find_crd_version_env()
+    values = {}
+    if env_path:
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            values[key.strip()] = value.strip().strip('"')
+    url = values.get(
+        "CRD_DEB_URL",
+        "https://dl.google.com/linux/chrome-remote-desktop/deb/pool/main/c/"
+        f"chrome-remote-desktop/chrome-remote-desktop_{values.get('CRD_VERSION', '')}_amd64.deb",
+    )
+    # The env file writes the URL with a literal ${CRD_VERSION} placeholder.
+    url = url.replace("${CRD_VERSION}", values.get("CRD_VERSION", ""))
+    return {
+        "version": values.get("CRD_VERSION", ""),
+        "sha256": values.get("CRD_SHA256", ""),
+        "url": url,
+        "packages_url": values.get(
+            "CRD_PACKAGES_URL",
+            "https://dl.google.com/linux/chrome-remote-desktop/deb/dists/"
+            "stable/main/binary-amd64/Packages",
+        ),
+    }
+
+
+def _google_component_dir():
+    """Directory where the Google host components should live.
+
+    Prefers the directory where hyprcrd-portal already resolves; falls back to
+    the user-level lib dir so `install-host` works without root.
+    """
+    portal = find_component("hyprcrd-portal")
+    if portal.exists():
+        return portal.parent
+    local = Path.home() / ".local" / "lib" / "hyprcrd"
+    local.mkdir(mode=0o755, parents=True, exist_ok=True)
+    return local
+
+
+def _extract_deb(deb_path, work_dir):
+    data_tar = work_dir / "data.tar.xz"
+    try:
+        subprocess.run(
+            ["bsdtar", "-xf", str(deb_path), "-C", str(work_dir), "data.tar.xz"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        subprocess.run(
+            ["ar", "x", str(deb_path), "data.tar.xz"],
+            check=True,
+            cwd=work_dir,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    if not data_tar.exists():
+        raise RuntimeError("data.tar.xz not found in .deb payload")
+    data_dir = work_dir / "data"
+    data_dir.mkdir()
+    subprocess.run(
+        ["tar", "-xf", str(data_tar), "-C", str(data_dir)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return data_dir / "opt" / "google" / "chrome-remote-desktop"
+
+
+def cmd_install_host(args):
+    meta = load_crd_version()
+    if not meta["version"] or not meta["sha256"]:
+        print(f"{RED}Could not read pinned CRD version (crd_version.env missing).{NC}")
+        sys.exit(1)
+
+    target_dir = _google_component_dir()
+    print(f"Fetching Google Chrome Remote Desktop {meta['version']}...")
+    with tempfile.TemporaryDirectory(prefix="hyprcrd-crd-") as tmp:
+        deb_path = Path(tmp) / "crd.deb"
+        try:
+            with urllib.request.urlopen(meta["url"], timeout=60) as r:  # nosec B310
+                deb_path.write_bytes(r.read())
+        except Exception as e:
+            print(f"{RED}Download failed: {e}{NC}")
+            sys.exit(1)
+
+        digest = hashlib.sha256(deb_path.read_bytes()).hexdigest()
+        if digest != meta["sha256"]:
+            print(f"{RED}Checksum mismatch; refusing to install.{NC}")
+            print(f"  expected: {meta['sha256']}")
+            print(f"  actual:   {digest}")
+            sys.exit(1)
+        print("Checksum verified.")
+
+        try:
+            deb_root = _extract_deb(deb_path, Path(tmp))
+        except (FileNotFoundError, subprocess.CalledProcessError, RuntimeError) as e:
+            print(f"{RED}Extraction failed (need bsdtar or ar+tar): {e}{NC}")
+            sys.exit(1)
+
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            for name in (
+                "chrome-remote-desktop-host",
+                "crashpad-handler",
+                "native-messaging-host",
+                "start-host",
+            ):
+                src = deb_root / name
+                if src.exists():
+                    dst = target_dir / name
+                    dst.write_bytes(src.read_bytes())
+                    dst.chmod(0o755)
+            for name in ("libremoting_core.so", "icudtl.dat"):
+                src = deb_root / name
+                if src.exists():
+                    dst = target_dir / name
+                    dst.write_bytes(src.read_bytes())
+                    dst.chmod(0o644)
+            locales = deb_root / "remoting_locales"
+            if locales.is_dir():
+                import shutil
+
+                dst = target_dir / "remoting_locales"
+                if dst.exists():
+                    shutil.rmtree(dst)
+                shutil.copytree(locales, dst)
+        except PermissionError as e:
+            print(f"{RED}Cannot write to {target_dir}: {e}{NC}")
+            print("Re-run with elevated privileges for a system install.")
+            sys.exit(1)
+
+    print(f"Google host components {meta['version']} installed to {target_dir}.")
+    if PID_FILE.exists():
+        try:
+            if psutil.pid_exists(int(PID_FILE.read_text().strip())):
+                print(
+                    f"{YELLOW}hyprCRD is running; restart it to use the new host binary.{NC}"
+                )
+        except Exception:
+            pass
+
+
+def cmd_check_host_update(args):
+    meta = load_crd_version()
+    try:
+        with urllib.request.urlopen(
+            meta["packages_url"], timeout=15
+        ) as r:  # nosec B310
+            index = r.read().decode("utf-8", "replace")
+    except Exception as e:
+        print(f"{RED}Could not fetch upstream package index: {e}{NC}")
+        sys.exit(1)
+    versions = []
+    in_pkg = False
+    for line in index.splitlines():
+        if line.startswith("Package: chrome-remote-desktop"):
+            in_pkg = True
+        elif line.startswith("Package: "):
+            in_pkg = False
+        elif in_pkg and line.startswith("Version: "):
+            versions.append(line.split(":", 1)[1].strip())
+    if not versions:
+        print(f"{RED}No chrome-remote-desktop versions found in index.{NC}")
+        sys.exit(1)
+
+    def _key(v):
+        return [int(p) if p.isdigit() else p for p in v.replace("-", ".").split(".")]
+
+    latest = sorted(versions, key=_key)[-1]
+    print(f"Pinned: {meta['version']}")
+    print(f"Latest: {latest}")
+    if latest == meta["version"]:
+        print("hyprCRD is pinned to the latest upstream release.")
+    else:
+        print(f"{YELLOW}A newer upstream release is available.{NC}")
+        print("Update scripts/crd_version.env, the packaging manifests, and run")
+        print("'hyprcrd install-host' after review.")
+
+
 def find_daemon():
+    script_dir = Path(__file__).resolve().parent
     for candidate in [
         CORE_DIR / "daemon.py",
+        script_dir / "daemon.py",
+        script_dir.parent / "lib" / "hyprcrd" / "daemon.py",
         Path("/usr/lib/hyprcrd/daemon.py"),
+        Path("/usr/local/lib/hyprcrd/daemon.py"),
         Path("/app/lib/hyprcrd/daemon.py"),
-        Path(__file__).resolve().parent / "daemon.py",
     ]:
         if candidate.exists():
             return candidate
@@ -73,7 +287,7 @@ def find_daemon():
 
 
 def print_banner():
-    print(f"{BOLD}hyprCRD{NC} — Wayland host for Chrome Remote Desktop\n")
+    print(f"{BOLD}hyprCRD{NC} - Wayland host for Chrome Remote Desktop\n")
 
 
 def cmd_doctor(args):
@@ -84,7 +298,11 @@ def cmd_doctor(args):
         (
             "Host binary (from .deb)",
             find_component("chrome-remote-desktop-host").exists(),
-            str(find_component("chrome-remote-desktop-host")),
+            (
+                str(find_component("chrome-remote-desktop-host"))
+                if find_component("chrome-remote-desktop-host").exists()
+                else "missing; run 'hyprcrd install-host'"
+            ),
         ),
         (
             "libremoting_core.so",
@@ -151,9 +369,9 @@ def cmd_doctor(args):
     all_passed = True
     for name, status, detail in checks:
         if status:
-            print(f"  {GREEN}✓{NC} {BOLD}{name:<28}{NC}: {detail}")
+            print(f"  {GREEN}[ok]{NC} {BOLD}{name:<28}{NC}: {detail}")
         else:
-            print(f"  {RED}✗{NC} {BOLD}{name:<28}{NC}: {detail}")
+            print(f"  {RED}[fail]{NC} {BOLD}{name:<28}{NC}: {detail}")
             all_passed = False
 
     print()
@@ -359,6 +577,20 @@ def main():
         help="Run automated isolated test suite without affecting active session",
     )
     p_test.set_defaults(func=cmd_test)
+
+    # install-host
+    p_install = subparsers.add_parser(
+        "install-host",
+        help="Download and install the pinned Google CRD host components",
+    )
+    p_install.set_defaults(func=cmd_install_host)
+
+    # check-host-update
+    p_cupdate = subparsers.add_parser(
+        "check-host-update",
+        help="Compare the pinned CRD version against the latest upstream release",
+    )
+    p_cupdate.set_defaults(func=cmd_check_host_update)
 
     args = parser.parse_args()
     if not args.command:

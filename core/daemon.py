@@ -28,10 +28,14 @@ def _find_component(name):
     env_name = "HYPRCRD_" + name.upper().replace("-", "_").replace(".", "_")
     if os.environ.get(env_name) and os.path.exists(os.environ[env_name]):
         return os.environ[env_name]
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     for candidate in [
         os.path.join(BIN_DIR, name),
-        os.path.join(os.path.dirname(__file__), name),
+        os.path.join(script_dir, name),
+        os.path.join(script_dir, "..", "lib", "hyprcrd", name),
+        os.path.join(os.path.expanduser("~"), ".local", "lib", "hyprcrd", name),
         os.path.join("/usr/lib/hyprcrd", name),
+        os.path.join("/usr/local/lib/hyprcrd", name),
         os.path.join("/app/lib/hyprcrd", name),
     ]:
         if os.path.exists(candidate):

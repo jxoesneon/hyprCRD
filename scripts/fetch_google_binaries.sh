@@ -14,13 +14,14 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BIN_DIR="$BASE_DIR/bin"
-CRD_VERSION="155.0.8059.19"
-GOOGLE_DEB_URL="https://dl.google.com/linux/chrome-remote-desktop/deb/pool/main/c/chrome-remote-desktop/chrome-remote-desktop_${CRD_VERSION}_amd64.deb"
-EXPECTED_SHA256="39701c6951b3d9edff08143dccad919468e1866b9897c873141dc4f66baaff72"
-APT_PACKAGES_URL="https://dl.google.com/linux/chrome-remote-desktop/deb/dists/stable/main/binary-amd64/Packages"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/crd_version.env"
+GOOGLE_DEB_URL="$CRD_DEB_URL"
+EXPECTED_SHA256="$CRD_SHA256"
+APT_PACKAGES_URL="$CRD_PACKAGES_URL"
 
 if [ "${1:-}" = "--check-update" ]; then
-    echo "▶ Checking upstream chrome-remote-desktop versions..."
+    echo "=> Checking upstream chrome-remote-desktop versions..."
     LATEST_VERSION=$(curl -fsSL "$APT_PACKAGES_URL" | awk '
         /^Package: chrome-remote-desktop$/ { in_pkg = 1; next }
         /^Package: / { in_pkg = 0 }
@@ -43,10 +44,10 @@ fi
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
-echo "▶ Fetching Google Chrome Remote Desktop $CRD_VERSION..."
+echo "=> Fetching Google Chrome Remote Desktop $CRD_VERSION..."
 curl -fsSL -o "$TEMP_DIR/crd.deb" "$GOOGLE_DEB_URL"
 
-echo "▶ Verifying SHA256 checksum..."
+echo "=> Verifying SHA256 checksum..."
 ACTUAL_SHA256=$(sha256sum "$TEMP_DIR/crd.deb" | awk '{print $1}')
 if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
     echo "Error: checksum mismatch for chrome-remote-desktop_${CRD_VERSION}_amd64.deb" >&2
@@ -56,7 +57,7 @@ if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
 fi
 echo "Checksum verified."
 
-echo "▶ Extracting Debian payload..."
+echo "=> Extracting Debian payload..."
 bsdtar -xf "$TEMP_DIR/crd.deb" -C "$TEMP_DIR" data.tar.xz
 mkdir -p "$TEMP_DIR/data"
 bsdtar -xf "$TEMP_DIR/data.tar.xz" -C "$TEMP_DIR/data"
@@ -64,7 +65,7 @@ bsdtar -xf "$TEMP_DIR/data.tar.xz" -C "$TEMP_DIR/data"
 DEB_ROOT="$TEMP_DIR/data/opt/google/chrome-remote-desktop"
 mkdir -p "$BIN_DIR"
 
-echo "▶ Installing binaries into $BIN_DIR..."
+echo "=> Installing binaries into $BIN_DIR..."
 cp -f "$DEB_ROOT/chrome-remote-desktop-host" "$BIN_DIR/"
 cp -f "$DEB_ROOT/libremoting_core.so" "$BIN_DIR/"
 cp -f "$DEB_ROOT/icudtl.dat" "$BIN_DIR/"

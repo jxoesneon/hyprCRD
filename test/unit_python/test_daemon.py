@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import json
+import time
 import signal
 import tempfile
 import unittest
@@ -510,6 +511,58 @@ class TestHyprCRDDaemon(unittest.TestCase):
             self.assertIsNone(
                 match,
                 f"{rel} uses string-form hl.dsp.dpms(...) ignored by Lua configs",
+            )
+
+    @patch("subprocess.Popen")
+    @patch.object(HyprCRDDaemon, "start_portal_if_needed")
+    def test_33_run_dispatches_client_events(self, mock_start_portal, mock_popen):
+        daemon = HyprCRDDaemon(
+            wayland_display="wayland-1", config_path=self.sample_config_path
+        )
+        mock_host = MagicMock()
+        mock_host.stdin = MagicMock()
+        mock_host.stdout = [
+            "Client connected: a@example.com\n",
+            "noise line\n",
+            "Client disconnected: a@example.com\n",
+        ]
+        mock_host.poll.side_effect = [0, 0, 0]
+        mock_popen.return_value = mock_host
+
+        with patch.object(daemon, "_on_client_connected") as mock_conn, patch.object(
+            daemon, "_on_client_disconnected"
+        ) as mock_disc, patch("os.path.exists", return_value=False):
+            daemon.run()
+            for _ in range(100):
+                if mock_conn.called and mock_disc.called:
+                    break
+                time.sleep(0.01)
+
+        mock_conn.assert_called_once_with("Client connected: a@example.com")
+        mock_disc.assert_called_once_with("Client disconnected: a@example.com")
+
+    def test_34_find_component_sibling_libexec(self):
+        # A daemon installed under <prefix>/lib/hyprcrd resolves siblings; a
+        # checkout layout resolves <prefix>/bin/../lib/hyprcrd as well.
+        fake_root = os.path.join(self.temp_dir.name, "prefix")
+        libexec = os.path.join(fake_root, "lib", "hyprcrd")
+        os.makedirs(libexec)
+        os.makedirs(os.path.join(fake_root, "bin"))
+        comp = os.path.join(libexec, "test-component-xyz")
+        with open(comp, "w", encoding="utf-8") as f:
+            f.write("x")
+
+        with patch.object(daemon_mod, "__file__", os.path.join(libexec, "daemon.py")):
+            self.assertEqual(
+                os.path.normpath(daemon_mod._find_component("test-component-xyz")),
+                comp,
+            )
+        with patch.object(
+            daemon_mod, "__file__", os.path.join(fake_root, "bin", "daemon.py")
+        ):
+            self.assertEqual(
+                os.path.normpath(daemon_mod._find_component("test-component-xyz")),
+                comp,
             )
 
 

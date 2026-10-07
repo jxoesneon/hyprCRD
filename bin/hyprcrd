@@ -17,7 +17,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-__version__ = "1.0.0-rc.1"
+__version__ = "1.0.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 BIN_DIR = BASE_DIR / "bin"

@@ -25,9 +25,8 @@
 
 | Version | Supported |
 | :--- | :---: |
-| X.Y.x | |
 | 1.0.x | yes |
-| < 1.0 (pre-releases) | no |
+| < 1.0.0 (pre-releases) | no |
 
 ---
 

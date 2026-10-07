@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.0.0] - 2026-10-06
+
+### Added
+- `make install` / `make uninstall` targets honoring `PREFIX` (default `/usr/local`) and `DESTDIR`, installing the CLI, portal, PAM shim, picker, daemon, Google components, systemd user unit, D-Bus activation service, portal descriptor, and example configuration.
+- Release workflow (`.github/workflows/release.yml`) gated on the CI pipeline, with tag-to-`__version__` verification and a GitHub Release body extracted from the matching CHANGELOG section.
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `.github/CODEOWNERS`, and `.github/dependabot.yml`.
+- `config/xdph-screencopy.conf.in` template producing a `xdph-screencopy.conf.example` for `~/.config/hypr/xdph.conf`.
+- `hyprcrd install-host` and `hyprcrd check-host-update` subcommands that fetch the pinned, checksum-verified Google host components on the user side and compare the pin against the upstream apt index; the pinned version/SHA-256/URLs live in `scripts/crd_version.env` (installed to `$(PREFIX)/share/hyprcrd/`) as the single source of truth.
+- Flatpak manifest renamed to `io.github.jxoesneon.hyprcrd` and marked experimental (not published to Flathub); the Google package is fetched via Flatpak extra-data at install time.
 
 ### Fixed
 - **Local display blanked at login**: `hl.dsp.dpms("on")` takes its action from a table under Hyprland's Lua config, so the string form was treated as a toggle and turned an active display off whenever the picker or daemon tried to wake it. DPMS is now dispatched with explicit `{ action = "on" | "off" }` tables (legacy `dpms <action>` fallback for hyprlang configs), and the picker no longer touches DPMS at all.
@@ -21,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Google Chrome Remote Desktop host bumped to **155.0.8059.19** (script, AUR `PKGBUILD`/`.SRCINFO`, Flatpak manifest).
+- `hyprcrd.service` is now bound to `graphical-session.target` (`PartOf`/`WantedBy`) and no longer hardcodes `WAYLAND_DISPLAY` or `XDG_CURRENT_DESKTOP`; the graphical session must export them. After upgrading, re-enable the unit: `systemctl --user reenable hyprcrd.service`.
+- Component lookup in `bin/hyprcrd` and `core/daemon.py` additionally searches the `lib/hyprcrd` directory next to the installed prefix and `/usr/local/lib/hyprcrd`.
+- AUR publishing is paused until AUR account registration reopens; `packaging/aur` and the publish workflow are retained but the tag trigger is disabled.
+- Removed machine-specific paths and decorative glyphs from console output and documentation; the README example host ID is now a placeholder UUID.
 
 ## [1.0.0-rc.1] - 2026-09-23
 
